@@ -13,19 +13,20 @@ It applies the following assumptions (written in FR to match the user's notes):
 - Hem_mal                     -> mapping dictionnaire (oui/non/catégories simples)
 - Dis_status HEM              -> mapping dichotomique (actif/rémission/inconnu)
 - HSCT_BMT                    -> encode allo=2, auto=1, none/No=0
-- GvHD                        -> 1 si présent (quelque soit le grade), 0 sinon
+- GvHD                        -> combine avec allogreft pour faire la variable rejet_allograft
 - Sys_dis, Solid_tumor, Organ_transpl,
   Drug_induced, Chemotherapy,
   Ibr_Flu_Met, Immuno_drugs,
   Tar_ther, Immunotherapy,
   Carttcells, Steroids_YN,
-  Prophylaxis_*               -> nettoyage guillemets + encodage binaire souple (oui/non)
+  Prophylaxis_* ,Vaccins      -> nettoyage guillemets + encodage binaire souple (oui/non)
 - SOFA_score                  -> numeric, clip [0,24], scale [0,1] en SOFA_scaled
 - Resp_rate (+ Intubation/SpO2 si dispo)
                               -> score de sévérité 0..3 (voir fonction _resp_severity)
+- Sp02                        -> lineariser
 - Temp                        -> coercition °C ; si >45 et <120, on suppose Fahrenheit -> conversion, clip [30,43]
-- Neutrophils                 -> nettoyage -> numeric (10^9/L), catégorie neutropénie (0=normal, 1=mild, 2=moderate, 3=severe)
-
+- Neutrophils                 -> combine avec Leukocytes pour une variable binaire neutropénie <500
+- Leukocytes                  -> combine avec neutrophile pour une variable binaire neutropénie <1k
 Le module est robuste aux colonnes manquantes : elles sont ignorées.
 """
 
@@ -89,23 +90,16 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
 
     if "HSCT_BMT" in df.columns:
         mapping = {
-
             1: "Autograft",
-            2: "Hallograft"
-
-
+            2: "Allograft"
         }
 
+        if "GvHD" in df.columns:
+            df["GvHD"] = pd.to_numeric(df["GvHD"], errors="coerce")
+            df["rejet_allograft"] = (df["GvHD"] == 1) & (df["HSCT_BMT"] == 2)
+            df = df.drop(columns=["GvHD"])
         df = apply_mapping(df, "HSCT_BMT", mapping)
 
-
-    # Family of binary prophylaxis/therapies flags
-    maybe_binary = ["GvHD",
-        "Sys_dis","Solid_tumor","Organ_transpl","Drug_induced","Chemotherapy",
-        "Ibr_Flu_Met","Immuno_drugs","Tar_ther","Immunotherapy","Carttcells",
-        "Steroids_YN","Prophylaxis_pneumocystis","Prophylaxis_antifungal",
-        "Prophylaxis_bacterial","Prophylaxis_viral"
-    ]
 
     # SOFA
     if "SOFA_score" in df.columns:
@@ -116,8 +110,13 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
         df["SOFA_scaled"] = sofa / 24.0
 
     # Resp rate severity
+    if "SpO2" in df.columns:
+       df["Sa02"] = sao2_hill(df["SpO2"])
+       df = df.drop(columns=["SpO2"])
+
     if "Resp_rate" in df.columns:
 
+        #ancienne méthode
         df["Resp_severity"] = _resp_severity(df)
         df = df.drop(columns=["Resp_rate"])
 
@@ -126,16 +125,19 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
         df = _temp_to_cat(df, "Temp")
 
     # Neutrophils: clean to numeric and category
-    if "Neutrophils" in df.columns:
+    if "Neutrophils" in df.columns and "Leukocytes" in df.columns:
         # Extract numbers like "1.2", "1,2", "1.2 x10^9/L"
         s = df["Neutrophils"].astype(str).str.extract(r"([+-]?\d+(?:[.,]\d+)?)", expand=False)
         val = pd.to_numeric(s.str.replace(",", ".", regex=False), errors="coerce")
-
-        df["Neutrophils_num"] = val
-        neutrophiles_scaled, vmin, vmax = _scale_minmax(df["Neutrophils_num"])
-        df["Neutrophils_scaled"] = neutrophiles_scaled
-        df["Neutrophils_cat"] = _neutro_category(val)
-        df = df.drop(columns=["Neutrophils_num","Neutrophils_scaled"])
+        s_leuko = df["Leukocytes"].astype(str).str.extract(r"([+-]?\d+(?:[.,]\d+)?)", expand=False)
+        val_leuko = pd.to_numeric(s_leuko.str.replace(",", ".", regex=False), errors="coerce")
+        df["Neutropenie"] = (val < 0.5) | (val_leuko < 1)
+        df = df.drop(columns=["Leukocytes","Neutrophils"])
+        # Ancienne méthode - catégoriser
+        # neutrophiles_scaled, vmin, vmax = _scale_minmax(df["Neutrophils_num"])
+        # df["Neutrophils_scaled"] = neutrophiles_scaled
+        # df["Neutrophils_cat"] = _neutro_category(val)
+        # df = df.drop(columns=["Neutrophils_num","Neutrophils_scaled"])
         # Verfier les données absurdes
 
     return df
@@ -174,6 +176,13 @@ def apply_mapping(df: pd.DataFrame, col: str, mapping: dict, prefix: str = "") -
     return df
 
 
+def sao2_hill(po2, p50=26.8, n=2.7):
+    """
+    po2 : pression partielle d'O2 en mmHg (scalaire ou array)
+    retourne SaO2 entre 0 et 1
+    """
+    po2 = np.asarray(po2, dtype=float)
+    return (po2**n) / (po2**n + p50**n)
 
 def _scale_minmax(series: pd.Series) -> Tuple[pd.Series, float, float]:
     """Retourne la série mise à l'échelle dans [0,1] + (vmin, vmax)."""

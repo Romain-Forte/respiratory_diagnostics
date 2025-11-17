@@ -141,7 +141,7 @@ def nettoyer_nan_par_colonne(df, strategies):
 
         elif methode == "zero":
             df[col] = df[col].fillna(0)
-            print(f"🔹 {col} → NaN remplacés par 0")
+            # print(f"🔹 {col} → NaN remplacés par 0")
 
         else:
             df[col] = df[col].fillna(methode)
