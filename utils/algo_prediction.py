@@ -15,9 +15,13 @@ from sklearn.multiclass import OneVsRestClassifier
 from sklearn.neural_network import MLPClassifier
 import matplotlib.pyplot as plt
 from sklearn.metrics import (
-    classification_report, f1_score, hamming_loss, jaccard_score, roc_auc_score, roc_curve, auc
+    classification_report, f1_score, hamming_loss, jaccard_score, roc_auc_score, roc_curve, auc, confusion_matrix, classification_report, accuracy_score ,precision_recall_curve
 )
-
+import seaborn as sns
+from typing import List, Optional
+import pandas as pd
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.preprocessing import StandardScaler
 
 # =========================
 # 2) Séparer X / y + split train/test
@@ -104,61 +108,77 @@ def preparer_jeu_xy(
 # =========================
 # 3) Mise à l’échelle (scaling)
 # =========================
-def normaliser_features(
-    X_train: pd.DataFrame,
-    X_test: pd.DataFrame,
-    colonnes_numeriques: Optional[List[str]] = None
-) -> Tuple[pd.DataFrame, pd.DataFrame, StandardScaler, List[str]]:
+
+class AutoStandardScaler(BaseEstimator, TransformerMixin):
     """
-    Applique un StandardScaler sur les colonnes numériques.
-    - Si 'colonnes_numeriques' est None, on les détecte automatiquement.
-    Retourne: X_train_scaled, X_test_scaled, scaler, colonnes_numeriques
+    StandardScaler capable d'être utilisé dans un pipeline sklearn.
+    - Détecte automatiquement les colonnes numériques si none.
+    - Conserve le DataFrame (retourne DataFrame et non numpy array).
     """
-    X_train = X_train.copy()
-    X_test = X_test.copy()
 
-    if colonnes_numeriques is None:
-        colonnes_numeriques = X_train.select_dtypes(include="number").columns.tolist()
+    def __init__(self, colonnes_numeriques: Optional[List[str]] = None):
+        self.colonnes_numeriques = colonnes_numeriques
+        self.scaler = StandardScaler()
 
-    scaler = StandardScaler()
-    if colonnes_numeriques:
-        X_train[colonnes_numeriques] = scaler.fit_transform(X_train[colonnes_numeriques])
-        X_test[colonnes_numeriques] = scaler.transform(X_test[colonnes_numeriques])
+    def fit(self, X: pd.DataFrame, y=None):
+        X = X.copy()
 
-    return X_train, X_test, scaler, colonnes_numeriques
+        # Détection automatique des colonnes numériques
+        if self.colonnes_numeriques is None:
+            self.colonnes_numeriques = X.select_dtypes(include="number").columns.tolist()
+
+        # Entraîner le StandardScaler uniquement sur ces colonnes
+        if self.colonnes_numeriques:
+            self.scaler.fit(X[self.colonnes_numeriques])
+
+        return self
+
+    def transform(self, X: pd.DataFrame):
+        X = X.copy()
+
+        if self.colonnes_numeriques:
+            X[self.colonnes_numeriques] = self.scaler.transform(X[self.colonnes_numeriques])
+
+        return X
+
 # =========================
 # 4) Entraînement du modèle multi-label
 # =========================
 def entrainer_modele_multilabel(
     X_train: pd.DataFrame,
     y_train: pd.DataFrame,
-    type_modele: str = "random_forest"
+    model
 ):
     """
-    Entraîne un modèle multi-label selon 'type_modele':
-      - "random_forest" : MultiOutputClassifier(RandomForestClassifier)
-      - "logreg_ovr"    : OneVsRest(LogisticRegression)
-      - "mlp"           : MLPClassifier (sorties sigmoid via 'logistic')
-    Retourne le modèle entraîné.
+    Entraîne un modèle multi-label à partir d'un modèle sklearn simple.
+
+    Parameters
+    ----------
+    X_train : pd.DataFrame
+        Données d'entrée
+    y_train : pd.DataFrame
+        Labels multi-label (plusieurs colonnes binaires)
+    model : sklearn model
+        Modèle sklearn simple (estimator), ex: RandomForestClassifier()
+
+    Returns
+    -------
+    multi_label_model : MultiOutputClassifier
+        Modèle multi-label entraîné
     """
-    if type_modele == "random_forest":
-        base = RandomForestClassifier(n_estimators=300, random_state=42, n_jobs=-1)
-        model = MultiOutputClassifier(base)
-    elif type_modele == "logreg_ovr":
-        base = LogisticRegression(max_iter=1000, n_jobs=-1)
-        model = OneVsRestClassifier(base)
-    elif type_modele == "mlp":
-        # Pour multi-label, sklearn MLPClassifier accepte y multi-output binaire
-        model = MLPClassifier(hidden_layer_sizes=(128, 64), activation='relu',
-                              learning_rate_init=1e-3, batch_size=64, max_iter=200,
-                              random_state=42)
-    else:
-        raise ValueError("type_modele inconnu. Utiliser: 'random_forest', 'logreg_ovr', ou 'mlp'.")
-    model.fit(X_train, y_train)
 
+    # Vérification du format multi-label
+    if not isinstance(y_train, pd.DataFrame):
+        raise ValueError("y_train doit être un DataFrame multi-label (plusieurs colonnes).")
 
+    # Emballer le modèle dans un MultiOutputClassifier
+    multi_label_model = MultiOutputClassifier(model)
 
-    return model
+    print("🔄 Entraînement du modèle multi-label...")
+    multi_label_model.fit(X_train, y_train)
+
+    print("✅ Modèle multi-label entraîné avec succès.")
+    return multi_label_model
 # =========================
 # 5) Évaluation du modèle multi-label
 # =========================
@@ -252,62 +272,91 @@ def metrics_of_predictions(y_test,y_pred):
         print(f"{k}: {v:.4f}")
 
     return metrics
-def at_least_one_correct(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+
+
+def evaluer_modele_multilabel(
+    model,
+    X_test: pd.DataFrame,
+    y_test: pd.DataFrame,
+    seuil: float = 0.5,
+    metric_fn=None
+) -> dict:
     """
-    Score multi-label : 1 si au moins un label correct est prédit, 0 sinon.
+    Évalue un modèle multi-label.
 
     Parameters
     ----------
-    y_true : np.ndarray of shape (n_samples, n_labels)
-        Matrice de vérité (0/1).
-    y_pred : np.ndarray of shape (n_samples, n_labels)
-        Matrice de prédiction (0/1).
+    model : sklearn model (MultiOutputClassifier, OneVsRestClassifier, etc.)
+    X_test : DataFrame ou array
+    y_test : DataFrame multi-label
+    seuil : float
+        Seuil pour transformer les probabilités en classes.
+    metric_fn : callable
+        Fonction de métrique prenant (y_true, y_pred).
+        Par défaut : F1-score.
 
     Returns
     -------
-    score : float
-        Moyenne du taux de succès (entre 0 et 1).
+    dict : métriques globales et par label
     """
-    # Vérification de forme
-    assert y_true.shape == y_pred.shape, "Dimensions incompatibles entre y_true et y_pred."
 
-    # Pour chaque ligne : intersection non vide ?
-    success = (y_true * y_pred).sum(axis=1) > 0
-    score = success.mean()
-    return float(score)
+    # -----------------------------
+    # Définition métrique par défaut
+    # -----------------------------
+    if metric_fn is None:
+        metric_fn = lambda a, b: f1_score(a, b, zero_division=0)
 
-def reject_n_lowest_correct(y_true: np.ndarray, y_pred: np.ndarray, n: int = 3) -> float:
-    """
-    Score = 1 si les `n` plus petites probabilités correspondent toutes
-    à des labels absents (y_true == 0).
+    # -----------------------------
+    # Vérifications
+    # -----------------------------
+    if not isinstance(y_test, pd.DataFrame):
+        raise ValueError("y_test doit être un DataFrame multi-label.")
 
-    Parameters
-    ----------
-    y_true : np.ndarray (n_samples, n_labels)
-        Matrice de vérité (0/1)
-    y_pred : np.ndarray (n_samples, n_labels)
-        Probabilités prédites (entre 0 et 1)
-    n : int
-        Nombre de labels les moins probables à vérifier
+    label_names = list(y_test.columns)
+    y_true = y_test.values
 
-    Returns
-    -------
-    score : float
-        Moyenne du taux de réussite (entre 0 et 1)
-    """
-    assert y_true.shape == y_pred.shape, "y_true et y_pred doivent avoir la même forme"
+    # -----------------------------
+    # Prédictions
+    # -----------------------------
+    try:
+        # Si predict_proba disponible → appliquer seuil
+        y_proba = model.predict_proba(X_test)
 
-    success = []
-    for yt, yp in zip(y_true, y_pred):
-        # Indices des n plus petites probabilités
-        lowest_idx = np.argsort(yp)[:n]
-        # Vérifier que ces labels sont bien absents
-        if np.all(yt[lowest_idx] == 0):
-            success.append(1)
-        else:
-            success.append(0)
+        # y_proba est une liste d'array : 1 par label
+        y_pred = np.column_stack([
+            (prob[:, 1] >= seuil).astype(int) for prob in y_proba
+        ])
 
-    return float(np.mean(success))
+    except Exception:
+        # Sinon fallback sur predict()
+        print("⚠️ predict_proba indisponible : utilisation de predict().")
+        y_pred = model.predict(X_test)
+
+    # -----------------------------
+    # Calcul des métriques
+    # -----------------------------
+    metrics_per_label = {}
+    for i, label in enumerate(label_names):
+        metrics_per_label[label] = metric_fn(y_true[:, i], y_pred[:, i])
+
+    # Macro-average = moyenne des labels
+    macro_score = np.mean(list(metrics_per_label.values()))
+
+    # Micro-average = vue globale
+    micro_score = metric_fn(y_true.ravel(), y_pred.ravel())
+
+    # -----------------------------
+    # Résultat final
+    # -----------------------------
+    results = {
+        "per_label": metrics_per_label,
+        "macro_avg": macro_score,
+        "micro_avg": micro_score,
+        "y_pred": y_pred
+    }
+
+    return results
+
 
 def multilabel_roc(
     y_true: np.ndarray,
@@ -452,3 +501,124 @@ def multilabel_roc(
     if return_fig_ax:
         return out, (fig, ax)
     return out
+
+def train_binary_classifier(X_train_sc, y_train, X_test_sc, y_test):
+    """
+    Entraîne un modèle de classification binaire sur des données déjà scalées.
+    """
+
+
+    model = LogisticRegression(class_weight="balanced", max_iter=10)
+    model.fit(X_train_sc, y_train)
+
+    y_pred = model.predict(X_test_sc)
+
+    # Calcul des métriques
+    acc = accuracy_score(y_test, y_pred)
+    cm = confusion_matrix(y_test, y_pred)
+
+    metrics = {
+        "accuracy": acc,
+        "confusion_matrix": cm,
+        "y_pred": y_pred
+    }
+
+    return model, metrics
+
+
+def show_metrics_binary(metrics):
+    """
+    Affiche l'accuracy et la matrice de confusion.
+    """
+    acc = metrics["accuracy"]
+    cm = metrics["confusion_matrix"]
+
+    print(f"🔎 Accuracy : {acc:.4f}")
+
+    plt.figure(figsize=(6, 5))
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+                xticklabels=["Prédit 0", "Prédit 1"],
+                yticklabels=["Réel 0", "Réel 1"])
+    plt.title("Matrice de confusion")
+    plt.ylabel("Classe réelle")
+    plt.xlabel("Classe prédite")
+    plt.show()
+
+
+def train_and_optimize_threshold_PR(model,X_train_sc, y_train, X_test_sc, y_test):
+    """
+    Entraîne un modèle, optimise le seuil de décision
+    via la courbe Precision-Recall, et affiche les résultats.
+    """
+
+    # ---------------------------------------
+    # 1. Entraînement du modèle (balanced)
+    # ---------------------------------------
+    model.fit(X_train_sc, y_train)
+
+    # Probabilités de la classe positive
+    y_proba = model.predict_proba(X_test_sc)[:, 1]
+
+
+    # ----------------------------------------------------
+    # 2. Courbe Precision-Recall + seuil optimal (F1 max)
+    # ----------------------------------------------------
+    precision, recall, thresholds = precision_recall_curve(y_test, y_proba)
+
+    # F1-score pour chaque seuil
+    f1 = 2 * (precision * recall) / (precision + recall + 1e-8)
+    best_idx = np.argmax(f1)
+
+    best_threshold = thresholds[best_idx]
+    best_f1 = f1[best_idx]
+
+    print(f"\n🔥 Seuil optimal (PR-F1) : {best_threshold:.3f}")
+    print(f"📈 Meilleur F1-score PR : {best_f1:.4f}")
+
+    # Prédiction avec le seuil optimal
+    y_pred_opt = (y_proba >= best_threshold).astype(int)
+
+
+    # -------------------------
+    # 3. Affichage des métriques
+    # -------------------------
+    # print("\n--- Metrics ---")
+    # print("Accuracy :", accuracy_score(y_test, y_pred_opt))
+    print("\nClassification Report :")
+    print(classification_report(y_test, y_pred_opt))
+
+
+    # ------------------------------
+    # 4. Matrice de confusion
+    # ------------------------------
+    cm = confusion_matrix(y_test, y_pred_opt)
+    plt.figure(figsize=(6, 5))
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+                xticklabels=["Prédit 0", "Prédit 1"],
+                yticklabels=["Réel 0", "Réel 1"])
+    plt.title("Matrice de confusion (seuil optimisé PR)")
+    plt.xlabel("Classe prédite")
+    plt.ylabel("Classe réelle")
+    plt.show()
+
+
+    # ------------------------------
+    # 5. Courbe Precision-Recall
+    # ------------------------------
+    plt.figure(figsize=(6, 5))
+    plt.plot(recall, precision, label="Precision-Recall curve")
+    plt.scatter(recall[best_idx], precision[best_idx], color="red", s=80,
+                label=f"Seuil optimal ({best_threshold:.2f})")
+    plt.xlabel("Recall")
+    plt.ylabel("Precision")
+    plt.title("Courbe Precision-Recall")
+    plt.legend()
+    plt.show()
+
+
+    return model, best_threshold, y_pred_opt
+
+
+
+
+
