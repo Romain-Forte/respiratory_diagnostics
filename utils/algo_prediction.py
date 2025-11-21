@@ -108,6 +108,22 @@ def preparer_jeu_xy(
 # =========================
 # 3) Mise à l’échelle (scaling)
 # =========================
+def normaliser_features(X_train, X_test):
+    # Sélection des colonnes numériques
+    cols_num = X_train.select_dtypes(include=["int64", "float64"]).columns
+
+    # Initialisation du scaler
+    scaler = StandardScaler()
+
+    # Ajustement sur le train + transformation
+    X_train_sc = X_train.copy()
+    X_train_sc[cols_num] = scaler.fit_transform(X_train[cols_num])
+
+    # Transformation du test
+    X_test_sc = X_test.copy()
+    X_test_sc[cols_num] = scaler.transform(X_test[cols_num])
+
+    return X_train_sc, X_test_sc, scaler, cols_num
 
 class AutoStandardScaler(BaseEstimator, TransformerMixin):
     """
@@ -543,6 +559,7 @@ def show_metrics_binary(metrics):
     plt.ylabel("Classe réelle")
     plt.xlabel("Classe prédite")
     plt.show()
+
 
 
 def train_and_optimize_threshold_PR(model,X_train_sc, y_train, X_test_sc, y_test):

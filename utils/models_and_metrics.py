@@ -75,7 +75,7 @@ def get_models(y_train,imbalance_threshold=0.2):
             ),
 
             "LightGBM": LGBMClassifier(
-                class_weight="balanced"
+                class_weight="balanced",verbose=-1
             ),
 
             "CatBoost": CatBoostClassifier(
@@ -95,7 +95,7 @@ def get_models(y_train,imbalance_threshold=0.2):
             "MLP Neural Net": MLPClassifier(max_iter=500),
             "Gaussian Naive Bayes": GaussianNB(),
             "XGBoost": XGBClassifier(eval_metric="logloss"),
-            "LightGBM": LGBMClassifier(),
+            "LightGBM": LGBMClassifier(verbose=-1),
             "CatBoost": CatBoostClassifier(verbose=0)
         }
 
@@ -129,6 +129,29 @@ def reject_n_lowest_correct(y_true: np.ndarray, y_pred: np.ndarray, n: int = 3) 
     return float(np.mean(success))
 
 
+def negative_predictive_value(y_true, y_pred):
+    """
+    Calcule la Negative Predictive Value (NPV) :
+    NPV = TN / (TN + FN)
+
+    y_true : array-like, valeurs réelles (0/1)
+    y_pred : array-like, prédictions (0/1)
+    """
+
+    y_true = np.array(y_true)
+    y_pred = np.array(y_pred)
+
+    # True Negatives (TN)
+    TN = np.sum((y_true == 0) & (y_pred == 0))
+
+    # False Negatives (FN)
+    FN = np.sum((y_true == 1) & (y_pred == 0))
+
+    # Éviter division par zéro
+    if (TN + FN) == 0:
+        return 0
+
+    return TN / (TN + FN)
 # ===========================
 #        FACTORY MÉTRIQUE
 # ===========================
@@ -201,6 +224,10 @@ def get_metric(**kwargs):
             "metric_fn": at_least_one_correct,
             "needs_proba": False
         },
+        "negative_predictive_value": {
+            "metric_fn": negative_predictive_value,
+            "needs_proba": False
+        },
         "reject_n_lowest_correct": {
             "metric_fn": lambda yt, yp: reject_n_lowest_correct(yt, yp, n=n),
             "needs_proba": True
@@ -242,7 +269,7 @@ def compare_models_metric(
     results = []
 
     for name, model in models.items():
-        print(f"\n🔄 Entraînement du modèle : {name}")
+        # print(f"\n🔄 Entraînement du modèle : {name}")
 
         # --- Entraînement ---
         try:
@@ -283,7 +310,7 @@ def compare_models_metric(
             print(e)
             continue
 
-        print(f"➡️ {name} : {metric_fn.__name__} = {score:.4f}")
+        # print(f"➡️ {name} : {metric_fn.__name__} = {score:.4f}")
         results.append((name, score))
 
     # --- Tri ---
@@ -294,3 +321,9 @@ def compare_models_metric(
     print(df_results)
 
     return df_results
+
+
+def f1_metric_xgb(preds, dtrain):
+    y_true = dtrain.get_label()
+    y_pred = (preds > 0.5).astype(int)
+    return "f1_custom", f1_score(y_true, y_pred), True
