@@ -196,6 +196,10 @@ def get_metric(**kwargs):
             "metric_fn": lambda yt, yp: fbeta_score(yt, yp, beta=beta, zero_division=0),
             "needs_proba": False
         },
+        "negative_predictive_value": {
+            "metric_fn": negative_predictive_value,
+            "needs_proba": False
+        },
 
         # =======================
         # MÉTRIQUES PROBABILITÉS
@@ -224,10 +228,7 @@ def get_metric(**kwargs):
             "metric_fn": at_least_one_correct,
             "needs_proba": False
         },
-        "negative_predictive_value": {
-            "metric_fn": negative_predictive_value,
-            "needs_proba": False
-        },
+
         "reject_n_lowest_correct": {
             "metric_fn": lambda yt, yp: reject_n_lowest_correct(yt, yp, n=n),
             "needs_proba": True
