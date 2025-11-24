@@ -87,6 +87,39 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
 
         }
         df = apply_mapping(df, "Dis_status HEM", mapping)
+    if "Alveolar_xray" in df.columns:
+
+        mapping = {
+            0: "No",
+            1: "Focal",
+            2: "Diffuse",
+        }
+        df = apply_mapping(df, "Alveolar_xray", mapping)
+    if "Interst_xray" in df.columns:
+
+        mapping = {
+            0: "No",
+            1: "Focal",
+            2: "Diffuse",
+        }
+        df = apply_mapping(df, "Interst_xray", mapping)
+    if "Alveolar_cons" in df.columns:
+
+        mapping = {
+            0: "No",
+            1: "Focal",
+            2: "Diffuse",
+        }
+        df = apply_mapping(df, "Alveolar_cons", mapping)
+    if "Ground_glass_op" in df.columns:
+
+        mapping = {
+            0: "No",
+            1: "Focal",
+            2: "Diffuse",
+        }
+        df = apply_mapping(df, "Ground_glass_op", mapping)
+
 
     if "HSCT_BMT" in df.columns:
         mapping = {
@@ -295,4 +328,21 @@ def _resp_severity(df: pd.DataFrame) -> pd.Series:
     # sev[intub == 1.0] = 3.0
     df = df.drop(columns=["Resp_rate"])
     return sev
+
+def _convert_all_columns_to_numeric(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Convertit toutes les colonnes d'un DataFrame en valeurs numériques.
+
+    Args:
+        df (pd.DataFrame): Le DataFrame à convertir.
+
+    Returns:
+        pd.DataFrame: Un nouveau DataFrame avec toutes les colonnes converties en numériques.
+    """
+    df = df.copy()
+
+    # convertir toutes les colonnes en numérique (float64). Les valeurs non convertibles deviennent NaN.
+    df = df.apply(lambda col: pd.to_numeric(col, errors="coerce")).astype("float64")
+
+    return df
 
