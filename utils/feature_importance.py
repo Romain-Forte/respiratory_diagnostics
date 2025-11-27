@@ -50,7 +50,17 @@ def shap_top10_per_estimator(model, X,col_names, to_save = False, dir_save = '')
         # SHAP explainer pour logistic regression
         explainer = shap.LinearExplainer(clf, X)
         shap_values = explainer.shap_values(X)
+                
+        # 1. Calcul de l’importance globale pour chaque ligne
+        importance = np.abs(shap_values.values).sum(axis=1)
 
+        # 2. Top k exemples (par ex. 5)
+        k = 5
+        top_idx = np.argsort(-importance)[:k]
+
+        # 3. Waterfall plot pour chaque observation sélectionnée
+        for i in top_idx:
+            shap.plots.waterfall(shap_values[i])
         # Plot officiel SHAP (optionnel)
 
         if to_save:

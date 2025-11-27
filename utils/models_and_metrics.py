@@ -2,7 +2,6 @@ from sklearn.svm import SVC
 from sklearn.naive_bayes import GaussianNB
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
-from catboost import CatBoostClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
@@ -22,7 +21,7 @@ from sklearn.metrics import (
     fbeta_score
 )
 
-def get_models(y_train,imbalance_threshold=0.2):
+def get_models(y_train,imbalance_threshold=0.2,use_catboost = True):
 
     y = np.array(y_train)
     pos_ratio = (y == 1).mean()
@@ -77,14 +76,17 @@ def get_models(y_train,imbalance_threshold=0.2):
             "LightGBM": LGBMClassifier(
                 class_weight="balanced",verbose=-1
             ),
-
-            "CatBoost": CatBoostClassifier(
-                verbose=0,
-                auto_class_weights="Balanced"
-            ),
+            
+            
 
         }
+        if use_catboost:
+            from catboost import CatBoostClassifier
 
+            models["CatBoost"] = CatBoostClassifier(
+                verbose=0,
+                auto_class_weights="Balanced"
+            )
     else:
         print("🙂 Dataset équilibré → aucun class_weight ajouté\n")
 
@@ -95,9 +97,15 @@ def get_models(y_train,imbalance_threshold=0.2):
             "MLP Neural Net": MLPClassifier(max_iter=500),
             "Gaussian Naive Bayes": GaussianNB(),
             "XGBoost": XGBClassifier(eval_metric="logloss"),
-            "LightGBM": LGBMClassifier(verbose=-1),
-            "CatBoost": CatBoostClassifier(verbose=0)
+            "LightGBM": LGBMClassifier(verbose=-1)
         }
+        if use_catboost:
+            from catboost import CatBoostClassifier
+
+            models["CatBoost"] = CatBoostClassifier(
+                verbose=0,
+                auto_class_weights="Balanced"
+            )
 
     return models
 
