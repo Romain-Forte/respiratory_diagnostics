@@ -90,7 +90,7 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
     if "Alveolar_xray" in df.columns:
 
         mapping = {
-            0: "No",
+
             1: "Focal",
             2: "Diffuse",
         }
@@ -98,7 +98,7 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
     if "Interst_xray" in df.columns:
 
         mapping = {
-            0: "No",
+
             1: "Focal",
             2: "Diffuse",
         }
@@ -106,7 +106,7 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
     if "Alveolar_cons" in df.columns:
 
         mapping = {
-            0: "No",
+
             1: "Focal",
             2: "Diffuse",
         }
@@ -114,7 +114,7 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
     if "Ground_glass_op" in df.columns:
 
         mapping = {
-            0: "No",
+
             1: "Focal",
             2: "Diffuse",
         }

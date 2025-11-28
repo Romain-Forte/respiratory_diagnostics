@@ -49,42 +49,66 @@ def shap_top10_per_estimator(model, X, col_names, to_save=False, dir_save=''):
 
         print(f"\n===== SHAP pour estimateur (classe {col_names[idx]}) =====")
 
-        # SHAP explainer pour logistic regression
-        explainer = shap.LinearExplainer(clf, X)
-        shap_values = explainer.shap_values(X)
-                
-        # 1. Calcul de l’importance globale pour chaque ligne
-        importance = np.abs(shap_values.values).sum(axis=1)
+        # create a SHAP explainer (try LinearExplainer, fallback to generic Explainer)
+        try:
+            explainer = shap.LinearExplainer(clf, X)
+        except Exception:
+            explainer = shap.Explainer(clf, X)
 
-<<<<<<< HEAD
+        # obtain SHAP values in a robust way and ensure we have a numpy array
+        try:
+            shap_res = explainer.shap_values(X)
+        except Exception:
+            shap_res = explainer(X)
+
+        # shap_res can be an Explanation, array or list (multiclass); normalize to ndarray
+        if hasattr(shap_res, "values"):
+            shap_vals = shap_res.values
+        else:
+            shap_vals = shap_res
+
+        # if the explainer returned a list (e.g., multiclass), pick the first element
+        if isinstance(shap_vals, list) and len(shap_vals) > 0:
+            shap_array = np.asarray(shap_vals[0])
+        else:
+            shap_array = np.asarray(shap_vals)
+
+        # 1. Calcul de l’importance globale pour chaque ligne (somme des valeurs absolues des features)
+        importance = np.abs(shap_array).sum(axis=1)
+
         # 2. Top k exemples (par ex. 5)
         k = 5
         top_idx = np.argsort(-importance)[:k]
 
         # 3. Waterfall plot pour chaque observation sélectionnée
         for i in top_idx:
-            shap.plots.waterfall(shap_values[i])
-        # Plot officiel SHAP (optionnel)
-=======
-        # Récupération du vecteur shap pour la classe (logistic regression → 1 vecteur)
-        shap_matrix = np.array(shap_values)
->>>>>>> 305815bb2c7e8079d5deb225bcbcd08600f58ba3
+            try:
+                # prefer the new Explanation-based waterfall when possible
+                base_val = getattr(explainer, "expected_value", None)
+                expl_shap = shap.Explanation(values=shap_array[i], base_values=base_val, data=X.iloc[i].values, feature_names=feature_names)
+                shap.plots.waterfall(expl_shap)
+            except Exception:
+                # fallback to direct call if needed
+                try:
+                    shap.plots.waterfall(shap_array[i])
+                except Exception:
+                    pass
 
-        # Sélection des 5 observations les plus extrêmes
-        magnitudes = np.abs(shap_matrix).sum(axis=1)
+        # Sélection des 5 observations les plus extrêmes (mêmes que importance)
+        magnitudes = importance
         top5_idx = np.argsort(magnitudes)[-5:][::-1]  # top 5 décroissant
 
         # ----- Summary plot -----
         if to_save:
             os.makedirs(dir_save, exist_ok=True)
             plt.figure()
-            shap.summary_plot(shap_values, X, feature_names=feature_names, show=False)
+            shap.summary_plot(shap_array, X, feature_names=feature_names, show=False)
             plt.tight_layout()
-            plt.savefig(f"{dir_save}/{col_names[idx]}_summary_bar.png")
+            plt.savefig(os.path.join(dir_save, f"{col_names[idx]}_summary_bar.png"))
             plt.close()
         else:
             plt.figure()
-            shap.summary_plot(shap_values, X, feature_names=feature_names)
+            shap.summary_plot(shap_array, X, feature_names=feature_names)
             plt.tight_layout()
 
         # ----- Waterfall plots pour 5 cas extrêmes -----
@@ -92,19 +116,31 @@ def shap_top10_per_estimator(model, X, col_names, to_save=False, dir_save=''):
             print(f"Waterfall #{rank+1} — Index observation : {obs_id}")
 
             # SHAP values pour une observation donnée
-            shap_single = shap_values[obs_id]
+            shap_single = shap_array[obs_id]
 
-            # Diagramme waterfall
+            # Diagramme waterfall (use legacy API but guard for types)
             plt.figure()
-            shap.plots._waterfall.waterfall_legacy(
-                explainer.expected_value,
-                shap_single,
-                feature_names=feature_names,
-                max_display=15
-            )
+            base_val = getattr(explainer, "expected_value", None)
+            if isinstance(base_val, (list, np.ndarray)):
+                # choose first base value if an array is returned
+                base_val = np.asarray(base_val).ravel()[0] if np.asarray(base_val).size > 0 else None
+
+            try:
+                shap.plots._waterfall.waterfall_legacy(
+                    base_val,
+                    shap_single,
+                    feature_names=feature_names,
+                    max_display=15
+                )
+            except Exception:
+                try:
+                    expl_shap = shap.Explanation(values=shap_single, base_values=base_val, data=X.iloc[obs_id].values, feature_names=feature_names)
+                    shap.plots.waterfall(expl_shap)
+                except Exception:
+                    pass
 
             if to_save:
-                plt.savefig(f"{dir_save}/{col_names[idx]}_waterfall_{rank+1}.png")
+                plt.savefig(os.path.join(dir_save, f"{col_names[idx]}_waterfall_{rank+1}.png"))
                 plt.close()
             else:
                 plt.show()

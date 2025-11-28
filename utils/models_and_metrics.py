@@ -8,6 +8,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import f1_score
 import pandas as pd
 import numpy as np
+from sklearn.multioutput import MultiOutputClassifier
 
 from sklearn.metrics import (
     f1_score,
@@ -21,7 +22,16 @@ from sklearn.metrics import (
     fbeta_score
 )
 
-def get_models(y_train,imbalance_threshold=0.2,use_catboost = True):
+def get_models(y_train, imbalance_threshold=0.2, use_catboost=True, multilabel=False):
+    """
+    Retourne un dictionnaire de modèles.
+
+    Args:
+        y_train: labels d'entraînement
+        imbalance_threshold: seuil de déséquilibre
+        use_catboost: inclure CatBoost ou non
+        multilabel: si True, enveloppe les modèles avec MultiOutputClassifier
+    """
 
     y = np.array(y_train)
     pos_ratio = (y == 1).mean()
@@ -46,7 +56,7 @@ def get_models(y_train,imbalance_threshold=0.2,use_catboost = True):
     if is_imbalanced:
         print("🧪 Activation automatique du class_weight / auto-balancing\n")
 
-        models = {
+        base_models = {
             "Logistic Regression": LogisticRegression(
                 class_weight="balanced",
                 max_iter=2000
@@ -76,21 +86,21 @@ def get_models(y_train,imbalance_threshold=0.2,use_catboost = True):
             "LightGBM": LGBMClassifier(
                 class_weight="balanced",verbose=-1
             ),
-            
-            
+
+
 
         }
         if use_catboost:
             from catboost import CatBoostClassifier
 
-            models["CatBoost"] = CatBoostClassifier(
+            base_models["CatBoost"] = CatBoostClassifier(
                 verbose=0,
                 auto_class_weights="Balanced"
             )
     else:
         print("🙂 Dataset équilibré → aucun class_weight ajouté\n")
 
-        models = {
+        base_models = {
             "Logistic Regression": LogisticRegression(max_iter=2000),
             "Random Forest": RandomForestClassifier(n_estimators=300),
             "SVM RBF": SVC(probability=True),
@@ -102,10 +112,17 @@ def get_models(y_train,imbalance_threshold=0.2,use_catboost = True):
         if use_catboost:
             from catboost import CatBoostClassifier
 
-            models["CatBoost"] = CatBoostClassifier(
+            base_models["CatBoost"] = CatBoostClassifier(
                 verbose=0,
                 auto_class_weights="Balanced"
             )
+
+    # Envelopper avec MultiOutputClassifier si multilabel
+    if multilabel:
+        models = {name: MultiOutputClassifier(model) for name, model in base_models.items()}
+        print("🏷️ Mode MULTILABEL activé (MultiOutputClassifier)")
+    else:
+        models = base_models
 
     return models
 
