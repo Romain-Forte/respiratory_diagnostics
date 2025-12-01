@@ -8,8 +8,10 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import f1_score
 import pandas as pd
 import numpy as np
-from sklearn.multioutput import MultiOutputClassifier
-
+from skmultilearn.problem_transform import LabelPowerset, BinaryRelevance
+from skmultilearn.adapt import MLkNN
+from skmultilearn.ensemble import RakelD
+from sklearn.multioutput import MultiOutputClassifier, ClassifierChain
 from sklearn.metrics import (
     f1_score,
     accuracy_score,
@@ -121,6 +123,7 @@ def get_models(y_train, imbalance_threshold=0.2, use_catboost=True, multilabel=F
     if multilabel:
         models = {name: MultiOutputClassifier(model) for name, model in base_models.items()}
         print("🏷️ Mode MULTILABEL activé (MultiOutputClassifier)")
+
     else:
         models = base_models
 
@@ -353,3 +356,75 @@ def f1_metric_xgb(preds, dtrain):
     y_true = dtrain.get_label()
     y_pred = (preds > 0.5).astype(int)
     return "f1_custom", f1_score(y_true, y_pred), True
+
+def get_models_multilabel(use_catboost=False):
+    """
+    Retourne un dictionnaire de modèles adaptés à la classification MULTILABEL.
+
+    Stratégies implémentées :
+    - OVR (One-vs-Rest) : XGBoost, LightGBM, Random Forest
+    - BR (Binary Relevance) : Logistic Regression
+    - Classifier Chains : chaîne de classifieurs dépendants
+    - MLkNN : k-Nearest Neighbors multilabel
+    - RAkEL : Random k-labelsets
+    - Label Powerset : transformer multilabel en single-label
+
+    Returns
+    -------
+    dict : {nom_modele: estimator}
+    """
+
+
+    models = {}
+
+    # XGBoost OVR
+    models["XGBoost OVR"] = MultiOutputClassifier(
+        XGBClassifier(
+            eval_metric="logloss",
+            verbosity=1,       # verbose pour xgboost
+            n_estimators=1000, # plus d'itérations/arbres
+            use_label_encoder=False
+        )
+    )
+
+
+
+    # Random Forest OVR (n_estimators augmenté ; sklearn RF n'a pas de param verbose)
+    models["Random Forest OVR"] = MultiOutputClassifier(
+        RandomForestClassifier(
+            n_estimators=500,
+            n_jobs=-1
+        )
+    )
+
+    # Logistic Regression BR (plus d'itérations, verbose si disponible selon solver)
+    models["Logistic Regression BR"] = MultiOutputClassifier(
+        LogisticRegression(
+            max_iter=5000,
+            verbose=1
+        )
+    )
+
+    # Classifier Chains (utilise une LogisticRegression avec plus d'itérations / verbose)
+    models["Classifier Chains"] = ClassifierChain(
+        LogisticRegression(max_iter=5000, verbose=1),
+        order="random",
+        cv=5
+    )
+
+    # MLkNN (skmultilearn) -- pas de verbose
+    models["MLkNN"] = MLkNN(k=3)
+
+    # RAkEL (RakelD) -- base classifier avec plus d'itérations/verbose si supporté
+    models["RAkEL"] = RakelD(
+        base_classifier=LogisticRegression(max_iter=5000, verbose=1),
+        labelset_size=3
+    )
+
+    # Label Powerset -- base classifier avec plus d'itérations/verbose si supporté
+    models["Label Powerset"] = LabelPowerset(
+        classifier=LogisticRegression(max_iter=5000, verbose=1)
+    )
+
+    print(f"\n🏷️ Mode MULTILABEL spécialisé : {len(models)} modèles chargés")
+    return models
