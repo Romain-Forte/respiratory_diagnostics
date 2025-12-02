@@ -331,13 +331,10 @@ def compare_models_metric(
             print(e)
             continue
 
-        # --- Calcul métrique ---
-        try:
-            score = metric_fn(y_test, y_pred_input)
-        except Exception as e:
-            print(f"⚠️ {name} : erreur calcul métrique → ignoré.")
-            print(e)
-            continue
+        print((y_test.shape, y_pred_input.shape))
+        print(y_pred_input)
+        score = metric_fn(y_test, y_pred_input)
+        
 
         # print(f"➡️ {name} : {metric_fn.__name__} = {score:.4f}")
         results.append((name, score))
@@ -380,10 +377,9 @@ def get_models_multilabel(use_catboost=False):
     # XGBoost OVR
     models["XGBoost OVR"] = MultiOutputClassifier(
         XGBClassifier(
-            eval_metric="logloss",
-            verbosity=1,       # verbose pour xgboost
-            n_estimators=1000, # plus d'itérations/arbres
-            use_label_encoder=False
+        objective='multi:softprob',
+        num_class=3,
+        eval_metric='mlogloss'
         )
     )
 
