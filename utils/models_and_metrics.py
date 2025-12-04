@@ -272,7 +272,9 @@ def compare_models_metric(
     y_train,
     X_test,
     y_test,
-    needs_proba: bool = False
+    needs_proba: bool = False,
+    metric_kwargs: dict | None = None,
+    metric_name: str | None = None
 ):
     """
     Compare plusieurs modèles selon une métrique donnée.
@@ -288,6 +290,12 @@ def compare_models_metric(
     needs_proba : bool
         True si la métrique doit recevoir des probabilités (ex: roc_auc_score)
         False si la métrique utilise des classes (ex: f1_score)
+    metric_kwargs : dict | None
+        Paramètres supplémentaires passés à la fonction de métrique
+        (ex: {"average": "weighted"} pour f1_score).
+    metric_name : str | None
+        Nom à utiliser pour la colonne des résultats. Si None, on tente de
+        récupérer __name__ ou le nom de la classe du callable.
 
     Returns
     -------
@@ -295,6 +303,7 @@ def compare_models_metric(
         Tableau trié des modèles selon la métrique choisie.
     """
 
+    metric_kwargs = metric_kwargs or {}
     results = []
 
     for name, model in models.items():
@@ -333,17 +342,22 @@ def compare_models_metric(
 
         print((y_test.shape, y_pred_input.shape))
         print(y_pred_input)
-        score = metric_fn(y_test, y_pred_input)
+        score = metric_fn(y_test, y_pred_input, **metric_kwargs)
         
 
         # print(f"➡️ {name} : {metric_fn.__name__} = {score:.4f}")
         results.append((name, score))
 
     # --- Tri ---
-    df_results = pd.DataFrame(results, columns=["Modèle", metric_fn.__name__])
-    df_results = df_results.sort_values(metric_fn.__name__, ascending=False)
+    metric_label = (
+        metric_name
+        or getattr(metric_fn, "__name__", None)
+        or metric_fn.__class__.__name__
+    )
+    df_results = pd.DataFrame(results, columns=["Modèle", metric_label])
+    df_results = df_results.sort_values(metric_label, ascending=False)
 
-    print(f"\n🏆 CLASSEMENT DES MODÈLES PAR {metric_fn.__name__.upper()} :\n")
+    print(f"\n🏆 CLASSEMENT DES MODÈLES PAR {metric_label.upper()} :\n")
     print(df_results)
 
     return df_results
