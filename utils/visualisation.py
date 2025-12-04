@@ -3,6 +3,219 @@ import seaborn as sns
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
 import numpy as np
 from sklearn.metrics import auc, roc_curve, roc_auc_score
+import pandas as pd
+from matplotlib import cm
+
+def plot_multilabel_cooccurrence(
+    df_labels: pd.DataFrame,
+    min_support: float = 0.0,
+    top_k: int | None = None,
+    normalize: str = "percent",
+    annot: bool = False,
+    figsize=(10, 8),
+    cmap: str = "magma",
+    mask_upper: bool = True,
+):
+    """
+    Visualise la co-occurrence des labels (df_cat_clean, one-hot) sous forme de heatmap.
+
+    Paramètres
+    ----------
+    df_labels : DataFrame binaire (shape = [n_samples, n_labels])
+    min_support : float, proportion minimale (0-1) pour garder un label
+    top_k : int ou None, conserve les top_k labels les plus fréquents (après min_support)
+    normalize : "percent" (par défaut) ou "count"
+        - percent : affiche le pourcentage de co-occurrence sur le total des lignes
+        - count   : affiche le nombre de co-occurrences
+    annot : bool, affiche les valeurs dans chaque case
+    figsize : tuple, taille de la figure
+    cmap : palette pour la heatmap
+    mask_upper : si True, masque la partie supérieure de la matrice pour lisibilité
+
+    Retour
+    ------
+    fig, ax : objets matplotlib
+    """
+    if not isinstance(df_labels, pd.DataFrame):
+        raise TypeError("df_labels doit être un DataFrame pandas avec des colonnes binaires.")
+
+    n_rows = len(df_labels)
+    if n_rows == 0:
+        raise ValueError("df_labels est vide.")
+
+    # Binariser par sécurité
+    df_bin = (df_labels > 0).astype(int)
+
+    # Fréquence de chaque label
+    support = df_bin.mean().sort_values(ascending=False)
+    if min_support > 0:
+        support = support[support >= min_support]
+    if top_k is not None:
+        support = support.head(top_k)
+
+    if support.empty:
+        raise ValueError("Aucun label après filtrage min_support/top_k.")
+
+    df_bin = df_bin[support.index]
+
+    # Matrice de co-occurrence
+    cooc_counts = df_bin.T.dot(df_bin)
+    if normalize == "percent":
+        cooc = cooc_counts / n_rows * 100
+        fmt = ".1f"
+        cbar_label = "% des patients"
+    elif normalize == "count":
+        cooc = cooc_counts
+        fmt = ".0f"
+        cbar_label = "Nombre de co-occurrences"
+    else:
+        raise ValueError("normalize doit être 'percent' ou 'count'.")
+
+    # Option pour ne garder que le triangle inférieur (visuellement plus lisible)
+    if mask_upper:
+        mask = np.triu(np.ones_like(cooc, dtype=bool))
+    else:
+        mask = None
+
+    # Ne pas saturer la diagonale
+    np.fill_diagonal(cooc.values, np.nan)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    sns.heatmap(
+        cooc,
+        mask=mask,
+        annot=annot,
+        fmt=fmt,
+        cmap=cmap,
+        square=True,
+        cbar_kws={"label": cbar_label},
+        ax=ax,
+    )
+    ax.set_title("Co-occurrence des labels (df_cat_clean)")
+    plt.tight_layout()
+    return fig, ax
+
+def plot_multilabel_network_matplotlib(
+    df_labels: pd.DataFrame,
+    min_support: float = 0.0,
+    top_k: int | None = None,
+    normalize: str = "count",  # "count" ou "percent"
+    edge_threshold: float | None = None,  # seuil pour dessiner une arête
+    edge_scale: tuple[float, float] = (0.5, 6.0),  # épaisseur min/max
+    node_scale: tuple[float, float] = (300.0, 1800.0),  # taille min/max des nœuds
+    figsize=(10, 8),
+    annot_edges: bool = False,
+    annot_nodes: bool = True,
+    cmap: str = "magma",
+):
+    """
+    Graphe de co-occurrence sans networkx : nodes sur un cercle, arêtes pondérées par co-occurrence.
+
+    Paramètres
+    ----------
+    df_labels : DataFrame binaire (n_samples, n_labels) — ex: df_cat_clean
+    min_support : proportion minimale (0-1) pour conserver un label
+    top_k : conserve les top_k labels restants
+    normalize : "count" ou "percent" pour le poids des arêtes
+    edge_threshold : si défini, seules les arêtes dont le poids >= seuil sont tracées
+    edge_scale : (min, max) largeur des arêtes
+    node_scale : (min, max) taille des nœuds (fonction du support)
+    annot_edges : affiche le poids sur les arêtes
+    annot_nodes : affiche le nom des labels
+    """
+    if not isinstance(df_labels, pd.DataFrame):
+        raise TypeError("df_labels doit être un DataFrame pandas.")
+    if len(df_labels) == 0:
+        raise ValueError("df_labels est vide.")
+
+    df_bin = (df_labels > 0).astype(int)
+    support = df_bin.mean().sort_values(ascending=False)
+    if min_support > 0:
+        support = support[support >= min_support]
+    if top_k is not None:
+        support = support.head(top_k)
+    if support.empty:
+        raise ValueError("Aucun label après filtrage min_support/top_k.")
+
+    df_bin = df_bin[support.index]
+    n_rows = len(df_bin)
+
+    cooc_counts = df_bin.T.dot(df_bin)
+    np.fill_diagonal(cooc_counts.values, 0)
+
+    if normalize == "percent":
+        cooc = cooc_counts / n_rows * 100.0
+        label_fmt = lambda w: f"{w:.1f}%"
+    elif normalize == "count":
+        cooc = cooc_counts
+        label_fmt = lambda w: f"{w:.0f}"
+    else:
+        raise ValueError("normalize doit être 'count' ou 'percent'.")
+
+    # Construire la liste d'arêtes
+    edges = []
+    for i, src in enumerate(cooc.index):
+        for j, dst in enumerate(cooc.columns):
+            if j <= i:
+                continue
+            w = cooc.iloc[i, j]
+            if w <= 0:
+                continue
+            if edge_threshold is not None and w < edge_threshold:
+                continue
+            edges.append((src, dst, float(w)))
+
+    if not edges:
+        raise ValueError("Aucune arête à dessiner après filtrage/seuil.")
+
+    weights = np.array([w for _, _, w in edges], dtype=float)
+    w_min, w_max = weights.min(), weights.max()
+    # Échelle des arêtes
+    if w_max == w_min:
+        widths = np.full_like(weights, edge_scale[1])
+    else:
+        widths = edge_scale[0] + (weights - w_min) / (w_max - w_min) * (edge_scale[1] - edge_scale[0])
+
+    # Échelle des nœuds (support)
+    s_min, s_max = support.min(), support.max()
+    if s_max == s_min:
+        node_sizes = pd.Series(node_scale[1], index=support.index)
+    else:
+        node_sizes = node_scale[0] + (support - s_min) / (s_max - s_min) * (node_scale[1] - node_scale[0])
+
+    # Placement des nœuds sur un cercle
+    n_nodes = len(support)
+    angles = np.linspace(0, 2 * np.pi, n_nodes, endpoint=False)
+    coords = {name: (np.cos(a), np.sin(a)) for name, a in zip(support.index, angles)}
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Arêtes
+    norm = plt.Normalize(vmin=weights.min(), vmax=weights.max())
+    cmap_obj = cm.get_cmap(cmap)
+    for (u, v, w), width in zip(edges, widths):
+        x1, y1 = coords[u]
+        x2, y2 = coords[v]
+        ax.plot([x1, x2], [y1, y2], linewidth=width, color=cmap_obj(norm(w)), alpha=0.8)
+        if annot_edges:
+            xm, ym = (x1 + x2) / 2, (y1 + y2) / 2
+            ax.text(xm, ym, label_fmt(w), fontsize=8, ha="center", va="center")
+
+    # Nœuds
+    for name, (x, y) in coords.items():
+        ax.scatter(x, y, s=node_sizes[name], color="skyblue", edgecolors="k", zorder=3)
+        if annot_nodes:
+            ax.text(x, y, name, fontsize=9, ha="center", va="center", zorder=4)
+
+    sm = cm.ScalarMappable(cmap=cmap_obj, norm=norm)
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=ax, fraction=0.035, pad=0.02)
+    cbar.set_label("Co-occurrence" + (" (%)" if normalize == "percent" else " (count)"))
+
+    ax.set_title("Graphe de co-occurrence des labels (sans networkx)")
+    ax.set_axis_off()
+    plt.tight_layout()
+    return fig, ax
 def show_metrics_binary(y_true, y_pred, threshold=0.5):
     """
     Affiche F1-score, Accuracy et la matrice de confusion pour un problème binaire.
