@@ -325,7 +325,20 @@ def compare_models_metric(
                     print(f"⚠️ {name} : predict_proba manquant → ignoré.")
                     continue
 
-                y_pred_input = model.predict_proba(X_test)[:, 1]
+                proba = model.predict_proba(X_test)
+
+                # MultiOutputClassifier renvoie une liste (une matrice par label).
+                if isinstance(proba, (list, tuple)):
+                    y_pred_input = np.column_stack(
+                        [p[:, 1] if getattr(p, "ndim", 1) > 1 else p for p in proba]
+                    )
+                elif isinstance(proba, np.ndarray) and proba.ndim == 3:
+                    y_pred_input = proba[:, :, 1]
+                elif isinstance(proba, np.ndarray) and proba.ndim == 2 and proba.shape[1] >= 2:
+                    y_pred_input = proba[:, 1]
+                else:
+                    print(f"⚠️ {name} : format de probabilités inattendu → ignoré.")
+                    continue
 
             else:
                 # On attend des classes
@@ -340,8 +353,6 @@ def compare_models_metric(
             print(e)
             continue
 
-        print((y_test.shape, y_pred_input.shape))
-        print(y_pred_input)
         score = metric_fn(y_test, y_pred_input, **metric_kwargs)
         
 
@@ -391,9 +402,13 @@ def get_models_multilabel(use_catboost=False):
     # XGBoost OVR
     models["XGBoost OVR"] = MultiOutputClassifier(
         XGBClassifier(
-        objective='multi:softprob',
-        num_class=3,
-        eval_metric='mlogloss'
+            objective="binary:logistic",
+            eval_metric="logloss",
+            n_estimators=300,
+            learning_rate=0.1,
+            max_depth=6,
+            subsample=0.9,
+            colsample_bytree=0.9
         )
     )
 
