@@ -432,7 +432,10 @@ def get_models_multilabel(use_catboost=False):
 
     # Classifier Chains (utilise une LogisticRegression avec plus d'itérations / verbose)
     models["Classifier Chains"] = ClassifierChain(
-        LogisticRegression(max_iter=5000, verbose=1),
+         RandomForestClassifier(
+                class_weight="balanced",
+                n_estimators=300
+            ),
         order="random",
         cv=5
     )
@@ -442,13 +445,19 @@ def get_models_multilabel(use_catboost=False):
 
     # RAkEL (RakelD) -- base classifier avec plus d'itérations/verbose si supporté
     models["RAkEL"] = RakelD(
-        base_classifier=LogisticRegression(max_iter=5000, verbose=1),
+        base_classifier= RandomForestClassifier(
+                class_weight="balanced",
+                n_estimators=300
+            ),
         labelset_size=3
     )
 
     # Label Powerset -- base classifier avec plus d'itérations/verbose si supporté
     models["Label Powerset"] = LabelPowerset(
-        classifier=LogisticRegression(max_iter=5000, verbose=1)
+        classifier= RandomForestClassifier(
+                class_weight="balanced",
+                n_estimators=300
+            ),
     )
 
     print(f"\n🏷️ Mode MULTILABEL spécialisé : {len(models)} modèles chargés")

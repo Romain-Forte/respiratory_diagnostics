@@ -35,8 +35,73 @@ from typing import Dict, Any, Tuple
 import numpy as np
 import pandas as pd
 
+ETIOLOGY_COLUMNS = [
+    "Etiology_Bacterial infection_Definitive diagnosis",
+    "Etiology_Viral infection_Definitive diagnosis",
+    "Etiology_Invasive pulmonary aspergillosis_Definitive diagnosis",
+    "Etiology_Pneumocystis jirovecii infection_Definitive diagnosis",
+    "Etiology_Mucorales_Definitive diagnosis",
+    "Etiology_Other fungal (specify below)_Definitive diagnosis",
+    "Etiology_Other infection (specify below)_Definitive diagnosis",
+    "Etiology_Cardiogenic pulmonary oedema_Definitive diagnosis",
+    "Etiology_Drug related_Definitive diagnosis",
+    "Etiology_Disease-related infiltrates_Definitive diagnosis",
+    "Etiology_Transfusion-related acute lung injury_Definitive diagnosis",
+    "Etiology_Other causes (specify below)_Definitive diagnosis",
+    "Etiology_Undetermined cause_Definitive diagnosis",
+]
+
+ETIOLOGY_MAPPING: Dict[str, set] = {
+    "Etiology_Bacterial infection_Definitive diagnosis": {
+        "BACTERIAL",
+        "LEGIONELLA",
+        "CHLAMYDIA",
+        "ACTINOMYCES",
+        "NOCARDIA",
+        "TUBERCULOSIS",
+    },
+    "Etiology_Viral infection_Definitive diagnosis": {
+        "COVID",
+        "FLU",
+        "VIRAL",
+        "RHINOVIRUS",
+        "VRS",
+        "PIV",
+        "CMV",
+        "METAPNEUMOVIRUS",
+        "VZV",
+        "HSV",
+    },
+    "Etiology_Invasive pulmonary aspergillosis_Definitive diagnosis": {"IPA"},
+    "Etiology_Pneumocystis jirovecii infection_Definitive diagnosis": {"PJP"},
+    "Etiology_Mucorales_Definitive diagnosis": {"MUCORALES"},
+    "Etiology_Other fungal (specify below)_Definitive diagnosis": {
+        "CANDIDEMIA",
+        "IFI",
+        "FUSARIUM",
+        "GEOTRICHUM",
+        "CRYPTOCOCCUS",
+        "TRICHOSPORON",
+        "HISTOPLASMOSIS",
+        "COCCIDIOIDOSE",
+        "TOXOPLASMOSIS",
+    },
+    "Etiology_Other infection (specify below)_Definitive diagnosis": {
+        "OTHER",
+        "ASPIRATION",
+    },
+    "Etiology_Cardiogenic pulmonary oedema_Definitive diagnosis": {"CPO"},
+    "Etiology_Drug related_Definitive diagnosis": {"DRPT"},
+    "Etiology_Disease-related infiltrates_Definitive diagnosis": {"DISEASE"},
+    "Etiology_Transfusion-related acute lung injury_Definitive diagnosis": set(),
+    "Etiology_Other causes (specify below)_Definitive diagnosis": set(),
+    "Etiology_Undetermined cause_Definitive diagnosis": {"UNDETERMINED", "EMPTY EMPTY"},
+}
+
+
 def transform_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
+
 
 
     # Age -> scale [0,1] + square
@@ -133,7 +198,29 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
             df = df.drop(columns=["GvHD"])
         df = apply_mapping(df, "HSCT_BMT", mapping)
 
+    if  "SOFA_Nervous" in df.columns:
+        df = df.rename(columns={"SOFA_Nervous": "Glasgow"})
+    cols_nodules = [
+    "CT_nodules#Centrolobular",
+    "CT_nodules#Peribronchovascular",
+    "CT_nodules#Pleural",
+    "Nodules"]
 
+    if  all(c in df.columns for c in cols_nodules):
+
+        df["Nodules_any"] = df[cols_nodules].max(axis=1)
+        df.drop(columns=cols_nodules)
+    cols_opacity = [
+    "Ground_glass_op",
+    "Crazy_paving",
+    "Interst_xray"]
+
+    if  all(c in df.columns for c in cols_opacity):
+
+        df["Opacity"] = df[cols_opacity].max(axis=1)
+        df.drop(columns=cols_opacity)
+    
+    df["Quad_no"] = df["Quad_no"].clip(upper=4.0)
     # SOFA
     if "SOFA_score" in df.columns:
         sofa = pd.to_numeric(df["SOFA_score"], errors="coerce")
@@ -157,6 +244,10 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
     if "Temp" in df.columns:
         df = _temp_to_cat(df, "Temp")
 
+    if "Hem_mal_AML" in df.columns and "Leukocytes" in df.columns:
+        df["Leukostase"] = (df["Hem_mal_AML"] == 1) & (df["Leukocytes"] > 50)
+
+    
     # Neutrophils: clean to numeric and category
     if "Neutrophils" in df.columns and "Leukocytes" in df.columns:
         # Extract numbers like "1.2", "1,2", "1.2 x10^9/L"
@@ -165,6 +256,7 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
         s_leuko = df["Leukocytes"].astype(str).str.extract(r"([+-]?\d+(?:[.,]\d+)?)", expand=False)
         val_leuko = pd.to_numeric(s_leuko.str.replace(",", ".", regex=False), errors="coerce")
         df["Neutropenie"] = (val < 0.5) | (val_leuko < 1)
+        
         df = df.drop(columns=["Leukocytes","Neutrophils"])
         # Ancienne méthode - catégoriser
         # neutrophiles_scaled, vmin, vmax = _scale_minmax(df["Neutrophils_num"])
@@ -172,6 +264,9 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
         # df["Neutrophils_cat"] = _neutro_category(val)
         # df = df.drop(columns=["Neutrophils_num","Neutrophils_scaled"])
         # Verfier les données absurdes
+    if "Vasopressors" in df.columns and "Septic_shock" in df.columns:
+        df["Septic_shock"] = (df["Septic_shock"] == 1) | (df["Vasopressors"] == 1)
+        df = df.drop(columns=["Vasopressors"])
 
     return df
 
@@ -286,16 +381,6 @@ def _temp_to_cat(
     return df
 
 
-def _neutro_category(x: pd.Series) -> pd.Series:
-    """Return 0 normal (>1.5), 1 mild (1.0-1.5], 2 moderate (0.5-1.0], 3 severe (<=0.5)."""
-    v = pd.to_numeric(x, errors="coerce")
-    cat = pd.Series(np.nan, index=v.index, dtype=float)
-    cat[v > 1.5] = 0.0
-    cat[(v > 1.0) & (v <= 1.5)] = 1.0
-    cat[(v > 0.5) & (v <= 1.0)] = 2.0
-    cat[v <= 0.5] = 3.0
-    return cat
-
 
 def _resp_severity(df: pd.DataFrame) -> pd.Series:
     """
@@ -328,6 +413,30 @@ def _resp_severity(df: pd.DataFrame) -> pd.Series:
     # sev[intub == 1.0] = 3.0
     df = df.drop(columns=["Resp_rate"])
     return sev
+
+
+def _encode_dg1_etiology(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Map DG1 free text codes to the binary etiology columns expected downstream.
+    Unknown codes fall back to "Other causes" so that no patient is silently dropped.
+    """
+    if "DG1" not in df.columns:
+        return df
+
+    df = df.copy()
+    normalized = df["DG1"].astype(str).str.strip().str.upper()
+    coverage = pd.Series(False, index=df.index)
+
+    for column in ETIOLOGY_COLUMNS:
+        match = normalized.isin(ETIOLOGY_MAPPING.get(column, set()))
+        df.loc[:, column] = match.astype("int8")
+        if column != "Etiology_Other causes (specify below)_Definitive diagnosis":
+            coverage = coverage | match
+
+    other_mask = ~coverage
+    df.loc[other_mask, "Etiology_Other causes (specify below)_Definitive diagnosis"] = 1
+    return df
+
 
 def _convert_all_columns_to_numeric(df: pd.DataFrame) -> pd.DataFrame:
     """
