@@ -82,6 +82,12 @@ def nettoyer_lignes_vides(df):
     df_sans_vides = df_sans_vides.fillna(0)
     return df_sans_vides
 
+def extraire_contenu_central(chaine):
+    parties = str(chaine).split('_')
+    if len(parties) < 3:
+        return chaine  # garde le nom original si le format ne correspond pas
+    return ' '.join(parties[1:-1])  # partie centrale entre les underscores
+
 def nettoyer_colonnes(df):
     """
     Nettoie les noms de colonnes d'un DataFrame en extrayant
@@ -89,11 +95,6 @@ def nettoyer_colonnes(df):
     Etiology_Cardiogenic pulmonary oedema_Definitive diagnosis
     → devient : Cardiogenic pulmonary oedema
     """
-    def extraire_contenu_central(chaine):
-        parties = str(chaine).split('_')
-        if len(parties) < 3:
-            return chaine  # garde le nom original si le format ne correspond pas
-        return ' '.join(parties[1:-1])  # partie centrale entre les underscores
 
     # Application à toutes les colonnes
     df = df.copy()

@@ -190,3 +190,136 @@ def compare_dg1_dataframes(
         mismatches.to_csv(output_path, index=False)
 
     return summary, mismatches, confusion
+
+
+def plot_confusion_heatmap(
+    confusion: pd.DataFrame,
+    *,
+    normalize: Optional[str] = "row",
+    figsize: Tuple[int, int] = (12, 10),
+    cmap: str = "Blues",
+    annot: bool = True,
+    ax: Optional[plt.Axes] = None,
+) -> plt.Axes:
+    """
+    Visualise la matrice de confusion produite par compare_dg1_dataframes sous forme de heatmap.
+
+    Args:
+        confusion: DataFrame carrÇ¸ (index = ancien encodage, colonnes = nouveau encodage).
+        normalize: None, "row", "column" ou "all" pour normaliser les comptes.
+        figsize: taille de la figure si `ax` n'est pas fourni.
+        cmap: palette de couleurs matplotlib/seaborn.
+        annot: affiche ou non la valeur dans chaque case.
+        ax: axes matplotlib existant (optionnel).
+
+    Returns:
+        matplotlib.axes.Axes: axes contenant la heatmap.
+    """
+    if confusion.empty:
+        raise ValueError("La matrice de confusion est vide.")
+
+    valid_norm = {None, "row", "column", "all"}
+    if normalize not in valid_norm:
+        raise ValueError(f"Option normalize invalide: {normalize}. Choisir parmi {valid_norm}.")
+
+    matrix = confusion.copy()
+    cbar_label = "Nombre de patients"
+    fmt = "d"
+
+    if normalize is not None:
+        matrix = matrix.astype(float)
+        if normalize == "row":
+            matrix = matrix.div(matrix.sum(axis=1).replace(0, np.nan), axis=0)
+            norm_label = " (normalisation par ligne)"
+        elif normalize == "column":
+            matrix = matrix.div(matrix.sum(axis=0).replace(0, np.nan), axis=1)
+            norm_label = " (normalisation par colonne)"
+        else:  # "all"
+            total = matrix.values.sum()
+            matrix = matrix / total if total else matrix
+            norm_label = " (normalisation globale)"
+        matrix = matrix.fillna(0)
+        fmt = ".0%"
+        cbar_label = "Part des diagnostics"
+    else:
+        norm_label = ""
+
+    if ax is None:
+        _, ax = plt.subplots(figsize=figsize)
+
+    sns.heatmap(
+        matrix,
+        annot=annot,
+        fmt=fmt,
+        cmap=cmap,
+        linewidths=0.5,
+        linecolor="white",
+        cbar_kws={"label": cbar_label},
+        ax=ax,
+    )
+    ax.set_xlabel("Diagnostique trouvé par DG1")
+    ax.set_ylabel("Diagnostique référence")
+    ax.set_title(f"Matrice de confusion DG1{norm_label}")
+    plt.tight_layout()
+    return ax
+def compute_new_features(row):
+    score = 0
+    # 1) Immunosuppression
+    if row["HSCT_BMT"] == 1:
+        immuno = "allogenic_stem_cell_transplant"
+        score += 3
+    
+    # 2) Acute leukemia (placeholder — à ajuster selon tes colonnes)
+    # Exemple si une colonne "Acute_leukemia" existait :
+    # if row["Acute_leukemia"] == 1:
+    #     return "acute_leukemia"
+        
+    
+    # TODO: préciser le codage de Hem_mal / Dis_status HEM pour identifier leucémies aiguës
+    # En attendant, je laisse un test vide à compléter :
+    acute_leukemia = False
+    if acute_leukemia:
+        immuno = "acute_leukemia"
+        score += 1
+    # 3) Solid tumors
+    if row["Solid_tumor"] == 1:
+         immuno = "solid_tumors"
+         score -= 2
+    
+    # 4) Other hematological malignancies
+    if row["Hem_mal"] == 1 or row["Dis_status HEM"] == 1:
+        immuno = "other_hematological_malignancies"
+        score += 1
+
+    # 2) Corticostéroïdes
+    corticosteroids = row["Steroids_YN"]
+    if corticosteroids:
+        score += 1
+
+    # 3) Symptômes > 7 jours
+    symptoms_gt_7_days = int(row["TIME SYMPTOMES-ICU"] > 7)
+    if symptoms_gt_7_days:
+        score += 1
+
+    # 4) Neutropénie (< 0.5 G/L)
+    neutropenia = int(row["Neutrophils"] < 0.5)
+    if neutropenia:
+        score += 1
+
+    # 5) Focal alveolar pattern
+    focal_alveolar_pattern = int(
+        (row["Alveolar_xray"] == 1 or row["Alveolar_cons"] == 1)
+        and row["Quad_no"] == 1
+    )
+
+    if focal_alveolar_pattern:
+        score += 1
+
+    
+    return {
+        "immunosuppression_category": immuno,
+        "corticosteroids": corticosteroids,
+        "symptoms_gt_7_days": symptoms_gt_7_days,
+        "neutropenia": neutropenia,
+        "focal_alveolar_pattern": focal_alveolar_pattern
+    },score
