@@ -2,18 +2,24 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, Iterable, List, Sequence
+from typing import Dict, Iterable, List, Sequence, Optional
+import re
 
 
 def load_feature_lists(
     config_path: str | Path,
     sections: Sequence[str] | None = None,
+    available_columns: Optional[Sequence[str]] = None,
 ) -> Dict[str, List[str]]:
     """
     Load feature name lists from a JSON configuration file.
 
     If ``sections`` is provided, only the requested keys will be returned.
     Otherwise all the lists contained in the JSON file are returned.
+
+    If a feature entry contains a '*' wildcard, all matching column names are
+    expanded using the provided ``available_columns`` list, treating '*'
+    as the regex token ``.*`` within the column name.
     """
     path = Path(config_path)
     if not path.exists():
@@ -38,12 +44,33 @@ def load_feature_lists(
         section_value = raw_content[section_name]
         if not isinstance(section_value, list) or not all(isinstance(item, str) for item in section_value):
             raise ValueError(f"Section '{section_name}' must be a list of strings.")
-        feature_lists[section_name] = section_value
+
+        expanded_list: List[str] = []
+        for item in section_value:
+            if "*" in item:
+                if available_columns is None:
+                    raise ValueError(
+                        f"Wildcard '{item}' requires `available_columns` to be provided."
+                    )
+                pattern = "^" + re.escape(item).replace(r"\*", ".*") + "$"
+                regex = re.compile(pattern)
+                matches = [col for col in available_columns if regex.match(col)]
+                if not matches:
+                    raise ValueError(f"No columns match wildcard '{item}'.")
+                expanded_list.extend(matches)
+            else:
+                expanded_list.append(item)
+
+        feature_lists[section_name] = expanded_list
 
     return feature_lists
 
 
-def load_columns(config_path: str | Path, sections: Sequence[str] | None = None) -> List[str]:
+def load_columns(
+    config_path: str | Path,
+    sections: Sequence[str] | None = None,
+    available_columns: Optional[Sequence[str]] = None,
+) -> List[str]:
     """
     Convenience wrapper that returns a single flattened list of columns.
 
@@ -52,7 +79,7 @@ def load_columns(config_path: str | Path, sections: Sequence[str] | None = None)
         sections: Optional iterable of keys to load from the configuration.
                   When omitted, all sections are concatenated.
     """
-    feature_lists = load_feature_lists(config_path, sections)
+    feature_lists = load_feature_lists(config_path, sections, available_columns)
     columns: List[str] = []
     for values in feature_lists.values():
         columns.extend(values)

@@ -77,6 +77,9 @@ def nettoyer_lignes_vides(df):
 
     # Supprimer ces lignes
     df_nettoye = df_rempli.drop(index=index_a_drop)
+    nb_vides = len(index_a_drop) 
+    if nb_vides > 0:
+        print(f"Nombre de lignes totalement vides : {nb_vides}")
 
     return df_nettoye, index_a_drop
 

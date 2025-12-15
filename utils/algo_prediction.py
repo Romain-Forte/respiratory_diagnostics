@@ -4,7 +4,7 @@
 import pandas as pd
 import numpy as np
 
-from typing import List, Tuple, Dict, Union, Optional
+from typing import List, Tuple, Dict, Union, Optional, Callable, Sequence
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -15,8 +15,20 @@ from sklearn.multiclass import OneVsRestClassifier
 from sklearn.neural_network import MLPClassifier
 import matplotlib.pyplot as plt
 from sklearn.metrics import (
-    classification_report, f1_score, hamming_loss, jaccard_score, roc_auc_score, roc_curve, auc, confusion_matrix, classification_report, accuracy_score ,precision_recall_curve
+    accuracy_score,
+    auc,
+    classification_report,
+    confusion_matrix,
+    f1_score,
+    hamming_loss,
+    jaccard_score,
+    precision_recall_curve,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+    roc_curve,
 )
+from utils.models_and_metrics import get_metric
 import seaborn as sns
 from typing import List, Optional
 import pandas as pd
@@ -290,6 +302,197 @@ def metrics_of_predictions(y_test,y_pred):
     return metrics
 
 
+def calculate_score(
+    df_features: pd.DataFrame,
+    y_true: Union[pd.Series, pd.DataFrame, Sequence[int]],
+    score_fn,
+    metrics: Optional[Sequence[Union[str, Callable[[pd.Series, pd.Series], float]]]] = None,
+    *,
+    align: str = "inner",
+    confusion_labels: Optional[Sequence[str]] = None,
+) -> Dict[str, Union[pd.Series, Dict[str, float], np.ndarray]]:
+    """
+    Évalue un score "manuel" (ex: Score_alice) sur un jeu de données sans entraînement.
+
+    Args:
+        df_features: DataFrame de features.
+        y_true: Series/DataFrame cible binaire (une seule colonne) ou séquence alignée sur df_features.
+        score_fn: objet exposant une méthode `predict(df)` (ex: Score_alice).
+        metrics: liste de noms ("accuracy", "precision", "recall", "f1",
+                 "jaccard", "hamming", "confusion_matrix", etc.) ou de callables.
+        align: méthode d'alignement des index ("inner", "left", "right").
+        confusion_labels: labels des axes pour la matrice de confusion.
+
+    Returns:
+        dict avec les métriques calculées, y_true aligné, ainsi que les sorties :
+        - `y_pred`: probabilités (si predict_proba disponible) sinon classes.
+        - `y_pred_labels`: prédictions binaires issues de `predict`.
+    """
+
+    if metrics is None:
+        metrics = ["accuracy"]
+    else:
+        metrics = list(metrics)
+
+    if align not in {"inner", "left", "right"}:
+        raise ValueError("`align` doit être parmi {'inner','left','right'}.")
+
+    if not hasattr(score_fn, "predict"):
+        raise AttributeError("`score_fn` doit exposer une méthode predict(df).")
+
+    if isinstance(y_true, pd.DataFrame):
+        if y_true.shape[1] != 1:
+            raise ValueError("`y_true` DataFrame doit contenir une seule colonne binaire.")
+        y_series = y_true.iloc[:, 0]
+    elif isinstance(y_true, pd.Series):
+        y_series = y_true
+    else:
+        y_seq = pd.Series(y_true)
+        if len(y_seq) != len(df_features):
+            raise ValueError("`y_true` doit avoir la même longueur que df_features.")
+        y_series = pd.Series(y_seq.values, index=df_features.index)
+
+    if align == "inner":
+        X_aligned, y_aligned = df_features.align(y_series, join="inner", axis=0)
+    elif align == "left":
+        X_aligned = df_features.copy()
+        y_aligned = y_series.reindex(df_features.index)
+    else:  # right
+        X_aligned = df_features.reindex(y_series.index)
+        y_aligned = y_series.copy()
+
+    if y_aligned.isna().any():
+        raise ValueError("y_true contient des valeurs manquantes après alignement.")
+
+    y_aligned = y_aligned.astype(int)
+    if X_aligned.empty or y_aligned.empty:
+        raise ValueError("L'alignement produit un ensemble vide.")
+
+    y_pred = score_fn.predict(X_aligned)
+    if isinstance(y_pred, pd.DataFrame):
+        if y_pred.shape[1] != 1:
+            raise ValueError("`predict` doit retourner un vecteur 1D ou une colonne unique.")
+        y_pred = y_pred.iloc[:, 0]
+    y_pred_series = pd.Series(y_pred, index=X_aligned.index, name="y_pred").astype(int)
+    if len(y_pred_series) != len(X_aligned):
+        raise ValueError("La sortie de `predict` doit avoir la même longueur que df_features.")
+
+    proba_available = hasattr(score_fn, "predict_proba")
+
+    metric_catalog = {name.lower(): cfg for name, cfg in get_metric().items()}
+    extra_metrics: Dict[str, Callable[[pd.Series, pd.Series], float]] = {
+        "jaccard": lambda yt, yp: jaccard_score(yt, yp, zero_division=0),
+        "hamming": lambda yt, yp: hamming_loss(yt, yp),
+    }
+    supported_names = sorted(set(metric_catalog.keys()) | set(extra_metrics.keys()) | {"confusion_matrix"})
+
+    results: Dict[str, Union[float, np.ndarray]] = {}
+    needs_proba = any(
+        isinstance(metric, str)
+        and metric.lower() in metric_catalog
+        and metric_catalog[metric.lower()].get("needs_proba")
+        for metric in metrics
+    )
+    y_pred_proba_series: Optional[pd.Series] = None
+
+    def _plot_confusion(cm: np.ndarray):
+        lbls = list(confusion_labels) if confusion_labels is not None else ["0", "1"]
+        plt.figure(figsize=(5, 4))
+        sns.heatmap(
+            cm,
+            annot=True,
+            fmt="d",
+            cmap="Blues",
+            xticklabels=[f"Prédit {lbls[0]}", f"Prédit {lbls[1]}"],
+            yticklabels=[f"Réel {lbls[0]}", f"Réel {lbls[1]}"],
+        )
+        plt.title("Matrice de confusion")
+        plt.ylabel("Classe réelle")
+        plt.xlabel("Classe prédite")
+        plt.tight_layout()
+        plt.show()
+
+    def _extract_positive_proba(
+        proba_values: Union[pd.Series, pd.DataFrame, np.ndarray],
+        index: pd.Index,
+    ) -> pd.Series:
+        if isinstance(proba_values, pd.DataFrame):
+            if proba_values.shape[1] >= 2:
+                series = proba_values.iloc[:, -1]
+            elif proba_values.shape[1] == 1:
+                series = proba_values.iloc[:, 0]
+            else:
+                raise ValueError("La DataFrame retournée par predict_proba est vide.")
+            return pd.Series(series.values, index=index, name="score_proba")
+
+        if isinstance(proba_values, pd.Series):
+            if len(proba_values) != len(index):
+                raise ValueError("La Series retournée par predict_proba a une longueur inattendue.")
+            return pd.Series(proba_values.values, index=index, name="score_proba")
+
+        arr = np.asarray(proba_values)
+        if arr.ndim == 2 and arr.shape[1] >= 2:
+            series = arr[:, -1]
+        elif arr.ndim == 1:
+            series = arr
+        else:
+            raise ValueError("Format de probabilités non supporté.")
+
+        if len(series) != len(index):
+            raise ValueError("La sortie de predict_proba doit avoir la même longueur que df_features.")
+        return pd.Series(series, index=index, name="score_proba")
+
+    if proba_available:
+        proba_values = score_fn.predict_proba(X_aligned)
+        y_pred_proba_series = _extract_positive_proba(proba_values, X_aligned.index)
+
+    if needs_proba and y_pred_proba_series is None:
+        raise ValueError(
+            "Certaines métriques demandées nécessitent predict_proba, "
+            "mais `score_fn` n'expose pas cette méthode."
+        )
+
+    for metric in metrics:
+        if isinstance(metric, str):
+            key = metric.lower()
+            if key == "confusion_matrix":
+                cm = confusion_matrix(y_aligned, y_pred_series)
+                results["confusion_matrix"] = cm
+                _plot_confusion(cm)
+                continue
+
+            if key in extra_metrics:
+                fn = extra_metrics[key]
+            elif key in metric_catalog:
+                cfg = metric_catalog[key]
+                fn = cfg["metric_fn"]
+                if cfg.get("needs_proba"):
+                    if y_pred_proba_series is None:
+                        raise ValueError(
+                            f"La métrique '{metric}' nécessite des probabilités mais aucune n'a été calculée."
+                        )
+                    results[key] = fn(y_aligned.values, y_pred_proba_series.values)
+                    continue
+            else:
+                raise ValueError(
+                    f"Métrique inconnue: {metric}. "
+                    f"Options disponibles: {', '.join(supported_names)}"
+                )
+            results[key] = fn(y_aligned, y_pred_series)
+        elif callable(metric):
+            name = getattr(metric, "__name__", "custom_metric")
+            results[name] = metric(y_aligned, y_pred_series)
+        else:
+            raise TypeError("Chaque métrique doit être un nom str ou une fonction callable.")
+
+    return {
+        "metrics": results,
+        "y_true": y_aligned,
+        "y_pred": y_pred_proba_series if y_pred_proba_series is not None else y_pred_series,
+        "y_pred_labels": y_pred_series,
+    }
+
+
 def evaluer_modele_multilabel(
     model,
     X_test: pd.DataFrame,
@@ -374,30 +577,6 @@ def evaluer_modele_multilabel(
     return results
 
 
-
-
-def train_binary_classifier(X_train_sc, y_train, X_test_sc, y_test):
-    """
-    Entraîne un modèle de classification binaire sur des données déjà scalées.
-    """
-
-
-    model = LogisticRegression(class_weight="balanced", max_iter=10)
-    model.fit(X_train_sc, y_train)
-
-    y_pred = model.predict(X_test_sc)
-
-    # Calcul des métriques
-    acc = accuracy_score(y_test, y_pred)
-    cm = confusion_matrix(y_test, y_pred)
-
-    metrics = {
-        "accuracy": acc,
-        "confusion_matrix": cm,
-        "y_pred": y_pred
-    }
-
-    return model, metrics
 
 
 def show_metrics_binary(metrics):
@@ -492,8 +671,3 @@ def train_and_optimize_threshold_PR(model,X_train_sc, y_train, X_test_sc, y_test
 
 
     return model, best_threshold, y_pred_opt
-
-
-
-
-

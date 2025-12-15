@@ -265,67 +265,124 @@ def plot_confusion_heatmap(
 
 
 
-def Score_alice(row):
-    score = 0
-    immuno = "others"
-    # 1) Immunosuppression
-    if row["HSCT_BMT_Allograft"] == 1:
-        immuno = "allogenic_stem_cell_transplant"
-        score += 3
-    
-    if row['Hem_mal_AML'] == 1 or row['Hem_mal_ALL'] == 1:
-        immuno = "acute_leukemia"
-        score += 1
+class ScoreAliceModel:
+    """
+    Implémentation du score clinique "Alice".
 
-    # 3) Solid tumors
-    if row["Solid_tumor"] == 1:
-         immuno = "solid_tumors"
-         score -= 2
-    
-    # 4) Other hematological malignancies
+    L'instance est appelable sur une ligne (Series) et expose également les méthodes
+    `predict` et `predict_proba` pour être compatible avec les pipelines classiques.
+    """
 
-    if row["Hem_mal_myeloma"] == 1 or row["Hem_mal_CLL"] == 1 or row["Hem_mal_CML"] == 1:
-        immuno = "other_hematological_malignancies"
-        score += 1
-    
-    # 2) Corticostéroïdes
-    corticosteroids = row["Steroids_YN"] == 1
-    if corticosteroids:
-        score += 1
+    _SCORE_MAX = 12.0
 
-    # 3) Symptômes > 7 jours
-    symptoms_gt_7_days = int(row["TIME SYMPTOMES-ICU"] > 7)
-    if symptoms_gt_7_days:
-        score += 1
+    def __call__(self, row: pd.Series):
+        return self._score_row(row)
 
-    # 4) Neutropénie (< 0.5 G/L)
-    neutropenia = row["Neutropenie"] == 1
-    if neutropenia:
-        score += 1
+    def _score_row(self, row: pd.Series):
+        score = 0
+        immuno = "others"
+        # 1) Immunosuppression
+        if row["HSCT_BMT_Allograft"] == 1:
+            immuno = "allogenic_stem_cell_transplant"
+            score += 3
 
-    # 5) Focal alveolar pattern
-    focal_alveolar_pattern = int(
-        (row["Alveolar_xray_Focal"] == 1 or row["Alveolar_cons_Focal"] == 1)
-        and row["Quad_no"] == 1
-    )
+        if row["Hem_mal_AML"] == 1 or row["Hem_mal_ALL"] == 1:
+            immuno = "acute_leukemia"
+            score += 1
 
-    if focal_alveolar_pattern:
-        score += 1
-        
-    # 6) Hemoptysis
-    hemoptysis = row["Hemoptysis"] == 1
-    if hemoptysis:
-        score += 1 
-    
-    
-    predicted_IPA = score >= 4 # ou strict ???
-     
-        
-    return {
-        "immunosuppression_category": immuno,
-        "corticosteroids": corticosteroids,
-        "symptoms_gt_7_days": symptoms_gt_7_days,
-        "neutropenia": neutropenia,
-        "hemoptysis": hemoptysis,
-        "focal_alveolar_pattern": focal_alveolar_pattern
-    },score, predicted_IPA
+        # 3) Solid tumors
+        if row["Solid_tumor"] == 1:
+            immuno = "solid_tumors"
+            score -= 2
+
+        # 4) Other hematological malignancies
+        if (
+            row["Hem_mal_myeloma"] == 1
+            or row["Hem_mal_CLL"] == 1
+            or row["Hem_mal_CML"] == 1
+        ):
+            immuno = "other_hematological_malignancies"
+            score += 1
+
+        # 2) Corticostéroïdes
+        corticosteroids = row["Steroids_YN"] == 1
+        if corticosteroids:
+            score += 1
+
+        # 3) Symptômes > 7 jours
+        symptoms_gt_7_days = int(row["TIME SYMPTOMES-ICU"] > 7)
+        if symptoms_gt_7_days:
+            score += 1
+
+        # 4) Neutropénie (< 0.5 G/L)
+        neutropenia = row["Neutropenie"] == 1
+        if neutropenia:
+            score += 1
+
+        # 5) Focal alveolar pattern
+        focal_alveolar_pattern = int(
+            (row["Alveolar_xray_Focal"] == 1 or row["Alveolar_cons_Focal"] == 1)
+            and row["Quad_no"] == 1
+        )
+
+        if focal_alveolar_pattern:
+            score += 1
+
+        # 6) Hemoptysis
+        hemoptysis = row["Hemoptysis"] == 1
+        if hemoptysis:
+            score += 1
+
+        predicted_IPA = score >= 4  # ou strict ???
+
+        return (
+            {
+                "immunosuppression_category": immuno,
+                "corticosteroids": corticosteroids,
+                "symptoms_gt_7_days": symptoms_gt_7_days,
+                "neutropenia": neutropenia,
+                "hemoptysis": hemoptysis,
+                "focal_alveolar_pattern": focal_alveolar_pattern,
+            },
+            score,
+            predicted_IPA,
+        )
+
+    def predict(self, df: pd.DataFrame) -> pd.Series:
+        """
+        Calcule les prédictions booléennes pour l'ensemble des lignes d'un DataFrame.
+        """
+        df = self._ensure_dataframe(df)
+        preds = df.apply(lambda row: int(bool(self(row)[2])), axis=1)
+        return pd.Series(preds, index=df.index, name="Score_alice")
+
+    def predict_proba(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Retourne une probabilité simplifiée: score / 12 (bornée entre 0 et 1).
+        """
+        df = self._ensure_dataframe(df)
+
+        def _proba(row):
+            _, score, _ = self(row)
+            proba = float(score) / self._SCORE_MAX
+            proba = max(0.0, min(1.0, proba))
+            return proba
+
+        proba_positive = df.apply(_proba, axis=1)
+        proba_df = pd.DataFrame(
+            {
+                "prob_negative": 1.0 - proba_positive,
+                "prob_positive": proba_positive,
+            },
+            index=df.index,
+        )
+        return proba_df
+
+    @staticmethod
+    def _ensure_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+        if not isinstance(df, pd.DataFrame):
+            raise ValueError("`df` doit être un pandas.DataFrame.")
+        return df
+
+
+Score_alice = ScoreAliceModel()

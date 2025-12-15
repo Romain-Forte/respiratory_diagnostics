@@ -290,7 +290,7 @@ def show_roc_curve(y_true, y_score, threshold=0.5, pos_label=1, to_print=True):
         y_true = y_true.astype(int)
 
     # Calcul ROC
-    fpr, tpr, _ = roc_curve(y_true, y_score, pos_label=pos_label)
+    fpr, tpr, thresholds = roc_curve(y_true, y_score, pos_label=pos_label)
     roc_auc = roc_auc_score(y_true, y_score)
 
     # Plot
@@ -304,6 +304,25 @@ def show_roc_curve(y_true, y_score, threshold=0.5, pos_label=1, to_print=True):
     plt.title("ROC Curve")
     plt.legend(loc="lower right")
     plt.grid(True)
+
+    # Annoter quelques points avec leur threshold associé
+    if len(fpr) > 0:
+        nb_labels = min(10, len(fpr))
+        idxs = np.linspace(0, len(fpr) - 1, nb_labels, dtype=int)
+        for idx in idxs:
+            thr = thresholds[idx]
+            thr_label = "inf" if np.isinf(thr) else f"{thr:.2f}"
+            plt.scatter(fpr[idx], tpr[idx], color="darkorange", s=20)
+            plt.text(
+                fpr[idx],
+                tpr[idx],
+                f"t={thr_label}",
+                fontsize=8,
+                ha="left",
+                va="bottom",
+                color="black",
+            )
+
     plt.show()
 
     if to_print:

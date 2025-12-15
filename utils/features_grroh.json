@@ -1,0 +1,67 @@
+{
+  "Liste_features_grroh": [
+
+    "SEXE",
+    "age",
+
+    "delai_hop_rea",
+    "delai_symptome_rea",
+    "delai_diag_patho",
+
+    "Hemopathie",
+    "REM", "NCUR"  ,
+    "AUTOGREFFE",
+    "ALLOGREFFE",
+
+
+
+    "DCHIM", "LCHIM", 
+
+    "Maladie_syst",
+    "TUMEURSOLIDE",
+    "greffe_organe_solide",
+    "IMMUNSUP","Type_IS",
+
+    "prphy_pcp",
+    "prophy_antifung",
+    "prophy_virus",
+
+    "GLASGOW",
+    "SOFA",
+    "HEMOPTYSIE",
+
+    "FRMAX",
+    "SAO2MIN",
+    "TEMPMAX",
+    "SPAO2FIO2",
+    "NEUTROPENIE",
+    "LEUCO"
+
+
+  ],
+  "Liste_features_scan_radio" : 
+  [
+    "RADIOTHOR_CHOICE_*",
+    "RTDMTHOR_CHOICE_*",
+    "NBQUADR",
+    "REAAMIN"
+  ],
+  "features_etiology": [
+    "DIAGPRINCIPAL_final.x",
+    "DIAG2",
+    "diag_texte",
+    "DIAGPRINCIPAL_final.recod",
+    "IRA-DIAG - vd",
+    "second diag",
+    "troisieme diag",
+    "diag*",
+    "diagnostic.definitif.*"
+
+  ],
+  "death" : 
+  [
+    "ETATSORTIEHOSP",
+    "ESORTREA"
+
+  ]
+}

@@ -10,7 +10,6 @@ import pandas as pd
 import numpy as np
 from skmultilearn.problem_transform import LabelPowerset, BinaryRelevance
 from skmultilearn.adapt import MLkNN
-from skmultilearn.ensemble import RakelD
 from sklearn.multioutput import MultiOutputClassifier, ClassifierChain
 from sklearn.metrics import (
     f1_score,
