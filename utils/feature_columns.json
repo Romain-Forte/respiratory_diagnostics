@@ -29,6 +29,7 @@
     "Vaccins#Other",
     "SOFA_Nervous",
     "SOFA_score",
+    "Hemoptysis" , 
     "Resp_rate",
     "SpO2",
     "Temp",

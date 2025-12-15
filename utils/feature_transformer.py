@@ -126,15 +126,15 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
 
     if "Hem_mal" in df.columns:
         mapping = {
-            0: "AML",
-            1: "ALL",
-            2: "Non hodgkin lymphoma",
-            3: "myeloma",
-            4: "hodgkin lymphoma",
-            5: "CLL",
-            6 : "CML",
-            7: "MDS",
-            8:"other"
+            1: "AML",
+            2: "ALL",
+            3: "Non hodgkin lymphoma",
+            4: "myeloma",
+            5: "hodgkin lymphoma",
+            6: "CLL",
+            7 : "CML",
+            8: "MDS",
+            9:"other"
 
         }
 
@@ -143,12 +143,12 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
     if "Dis_status HEM" in df.columns:
 
         mapping = {
-            0: "minus 1 month",
-            1: "first line",
-            2: "more than 1 line",
-            3: "remission",
-            4: "uncontrolled",
-            5: "palliative"
+            1: "minus 1 month",
+            2: "first line",
+            3: "more than 1 line",
+            4: "remission",
+            5: "uncontrolled",
+            6: "palliative"
 
         }
         df = apply_mapping(df, "Dis_status HEM", mapping)
@@ -209,16 +209,16 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
     if  all(c in df.columns for c in cols_nodules):
 
         df["Nodules_any"] = df[cols_nodules].max(axis=1)
-        df.drop(columns=cols_nodules)
+        df = df.drop(columns=cols_nodules)
     cols_opacity = [
-    "Ground_glass_op",
-    "Crazy_paving",
-    "Interst_xray"]
+    "Ground_glass_op_Focal",
+    "Ground_glass_op_Diffuse",
+    "Crazy_paving",]
 
     if  all(c in df.columns for c in cols_opacity):
 
         df["Opacity"] = df[cols_opacity].max(axis=1)
-        df.drop(columns=cols_opacity)
+        df = df.drop(columns=cols_opacity)
     
     df["Quad_no"] = df["Quad_no"].clip(upper=4.0)
     # SOFA

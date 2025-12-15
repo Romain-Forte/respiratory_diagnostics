@@ -262,37 +262,34 @@ def plot_confusion_heatmap(
     ax.set_title(f"Matrice de confusion DG1{norm_label}")
     plt.tight_layout()
     return ax
-def compute_new_features(row):
+
+
+
+def Score_alice(row):
     score = 0
+    immuno = "others"
     # 1) Immunosuppression
-    if row["HSCT_BMT"] == 1:
+    if row["HSCT_BMT_Allograft"] == 1:
         immuno = "allogenic_stem_cell_transplant"
         score += 3
     
-    # 2) Acute leukemia (placeholder — à ajuster selon tes colonnes)
-    # Exemple si une colonne "Acute_leukemia" existait :
-    # if row["Acute_leukemia"] == 1:
-    #     return "acute_leukemia"
-        
-    
-    # TODO: préciser le codage de Hem_mal / Dis_status HEM pour identifier leucémies aiguës
-    # En attendant, je laisse un test vide à compléter :
-    acute_leukemia = False
-    if acute_leukemia:
+    if row['Hem_mal_AML'] == 1 or row['Hem_mal_ALL'] == 1:
         immuno = "acute_leukemia"
         score += 1
+
     # 3) Solid tumors
     if row["Solid_tumor"] == 1:
          immuno = "solid_tumors"
          score -= 2
     
     # 4) Other hematological malignancies
-    if row["Hem_mal"] == 1 or row["Dis_status HEM"] == 1:
+
+    if row["Hem_mal_myeloma"] == 1 or row["Hem_mal_CLL"] == 1 or row["Hem_mal_CML"] == 1:
         immuno = "other_hematological_malignancies"
         score += 1
-
+    
     # 2) Corticostéroïdes
-    corticosteroids = row["Steroids_YN"]
+    corticosteroids = row["Steroids_YN"] == 1
     if corticosteroids:
         score += 1
 
@@ -302,24 +299,33 @@ def compute_new_features(row):
         score += 1
 
     # 4) Neutropénie (< 0.5 G/L)
-    neutropenia = int(row["Neutrophils"] < 0.5)
+    neutropenia = row["Neutropenie"] == 1
     if neutropenia:
         score += 1
 
     # 5) Focal alveolar pattern
     focal_alveolar_pattern = int(
-        (row["Alveolar_xray"] == 1 or row["Alveolar_cons"] == 1)
+        (row["Alveolar_xray_Focal"] == 1 or row["Alveolar_cons_Focal"] == 1)
         and row["Quad_no"] == 1
     )
 
     if focal_alveolar_pattern:
         score += 1
-
+        
+    # 6) Hemoptysis
+    hemoptysis = row["Hemoptysis"] == 1
+    if hemoptysis:
+        score += 1 
     
+    
+    predicted_IPA = score >= 4 # ou strict ???
+     
+        
     return {
         "immunosuppression_category": immuno,
         "corticosteroids": corticosteroids,
         "symptoms_gt_7_days": symptoms_gt_7_days,
         "neutropenia": neutropenia,
+        "hemoptysis": hemoptysis,
         "focal_alveolar_pattern": focal_alveolar_pattern
-    },score
+    },score, predicted_IPA

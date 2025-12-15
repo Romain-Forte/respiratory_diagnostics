@@ -64,23 +64,22 @@ def analyser_nan(df: pd.DataFrame, top_n: int = 10, plot: bool = True) -> dict:
         "lignes": stats_lignes,
         "resume": resume
     }
-
 def nettoyer_lignes_vides(df):
     """
-    Supprime les lignes totalement vides d'un DataFrame pandas.
-    Affiche le nombre de lignes vides trouvées avant suppression.
-    Renvoie le DataFrame nettoyé.
+    Remplace tous les NaN par 0, supprime les lignes ne contenant que des 0.
+    Renvoie le DataFrame nettoyé et la liste des index des lignes supprimées.
     """
-    # Identifier les lignes totalement vides
-    lignes_vides = df[df.isna().all(axis=1)]
-    nb_vides = len(lignes_vides)
+    # Remplacer les NaN par 0
+    df_rempli = df.fillna(0)
 
-    print(f"Nombre de lignes totalement vides : {nb_vides}")
+    # Identifier les lignes contenant uniquement des 0
+    index_a_drop = df_rempli.index[(df_rempli == 0).all(axis=1)].tolist()
 
-    # Supprimer les lignes totalement vides
-    df_sans_vides = df.dropna(how='all')
-    df_sans_vides = df_sans_vides.fillna(0)
-    return df_sans_vides
+    # Supprimer ces lignes
+    df_nettoye = df_rempli.drop(index=index_a_drop)
+
+    return df_nettoye, index_a_drop
+
 
 def extraire_contenu_central(chaine):
     parties = str(chaine).split('_')
