@@ -101,7 +101,7 @@ def nettoyer_colonnes(df):
     # Application à toutes les colonnes
     df = df.copy()
     df.columns = [extraire_contenu_central(col) for col in df.columns]
-
+    df.columns = [col.replace("(specify below)", "") for col in df.columns]
     return df
 
 def nettoyer_nan_par_colonne(df, strategies):
