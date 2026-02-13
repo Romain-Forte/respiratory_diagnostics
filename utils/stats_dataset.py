@@ -332,7 +332,9 @@ class ScoreAliceModel:
         hemoptysis = row["Hemoptysis"] == 1
         if hemoptysis:
             score += 1
-
+        if row["Viral infection"] == 1:
+            
+            score +=1
         predicted_IPA = score >= 4  # ou strict ???
 
         return (

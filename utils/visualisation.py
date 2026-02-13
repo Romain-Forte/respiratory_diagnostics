@@ -212,7 +212,7 @@ def plot_multilabel_network_matplotlib(
     cbar = plt.colorbar(sm, ax=ax, fraction=0.035, pad=0.02)
     cbar.set_label("Co-occurrence" + (" (%)" if normalize == "percent" else " (count)"))
 
-    ax.set_title("Graphe de co-occurrence des labels (sans networkx)")
+    ax.set_title("Graphe de co-occurrence des labels")
     ax.set_axis_off()
     plt.tight_layout()
     return fig, ax

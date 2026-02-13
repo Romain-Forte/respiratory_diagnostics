@@ -102,6 +102,13 @@ def nettoyer_colonnes(df):
     df = df.copy()
     df.columns = [extraire_contenu_central(col) for col in df.columns]
     df.columns = [col.replace("(specify below)", "") for col in df.columns]
+
+    # Harmonize specific label wording
+    rename_map = {
+        "Other causes ": "Other non infectious causes",
+        "Drug related": "Drug toxicity related",
+    }
+    df = df.rename(columns=rename_map)
     return df
 
 def nettoyer_nan_par_colonne(df, strategies):

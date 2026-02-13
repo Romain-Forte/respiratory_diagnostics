@@ -200,6 +200,7 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
 
     if  "SOFA_Nervous" in df.columns:
         df = df.rename(columns={"SOFA_Nervous": "Glasgow"})
+        
     cols_nodules = [
     "CT_nodules#Centrolobular",
     "CT_nodules#Peribronchovascular",
@@ -213,11 +214,12 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
     cols_opacity = [
     "Ground_glass_op_Focal",
     "Ground_glass_op_Diffuse",
-    "Crazy_paving",]
+    "Crazy_paving",
+    "Interst_xray"]
 
     if  all(c in df.columns for c in cols_opacity):
 
-        df["Opacity"] = df[cols_opacity].max(axis=1)
+        df["GGO"] = df[cols_opacity].max(axis=1)
         df = df.drop(columns=cols_opacity)
     
     df["Quad_no"] = df["Quad_no"].clip(upper=4.0)
@@ -265,8 +267,8 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
         # df = df.drop(columns=["Neutrophils_num","Neutrophils_scaled"])
         # Verfier les données absurdes
     if "Vasopressors" in df.columns and "Septic_shock" in df.columns:
-        df["Septic_shock"] = (df["Septic_shock"] == 1) | (df["Vasopressors"] == 1)
-        df = df.drop(columns=["Vasopressors"])
+        df["Hypotension"] = (df["Septic_shock"] == 1) | (df["Vasopressors"] == 1)
+        df = df.drop(columns=["Septic_shock","Vasopressors"])
 
     return df
 
@@ -386,14 +388,11 @@ def _resp_severity(df: pd.DataFrame) -> pd.Series:
     """
     0 = normal, 1 = léger, 2 = modéré, 3 = sévère.
     Règles:
-      - Si Intubation vraie -> 3
       - Sinon, utiliser SpO2 si dispo: <88 -> 3, 88-91 -> 2, 92-94 -> 1, >=95 -> score selon RR
       - Sinon, catégoriser par RR seul: <12 -> 1, 12-20 -> 0, 21-29 -> 1, >=30 -> 2
     """
     rr = pd.to_numeric(df.get("Resp_rate", pd.Series(index=df.index, dtype=float)), errors="coerce")
     spo2 = pd.to_numeric(df.get("SpO2", df.get("Sp02", pd.Series(index=df.index, dtype=float))), errors="coerce")
-    # Intub a faire les variables ne sont pas très claires
-    #intub = _to_bool_series(df["Intubation"]) if "Intubation" in df.columns else pd.Series(0.0, index=df.index)
     sev = pd.Series(0.0, index=df.index)
     # Base on RR
     sev[rr < 12] = 1.0
@@ -410,7 +409,6 @@ def _resp_severity(df: pd.DataFrame) -> pd.Series:
 
 
     # Intubation overrides
-    # sev[intub == 1.0] = 3.0
     df = df.drop(columns=["Resp_rate"])
     return sev
 
