@@ -20,6 +20,7 @@
     "Immunotherapy",
     "Carttcells",
     "Steroids_YN",
+    "Charlson_index",
     "Prophylaxis_pneumocystis",
     "Prophylaxis_antifungal",
     "Prophylaxis_bacterial",
@@ -35,7 +36,9 @@
     "Temp",
     "PaO2/FiO2 VALUE VALUE",
     "Neutrophils",
-    "Leukocytes"
+    "Leukocytes",
+    "Vasopressors",
+    "Septic_shock"
   ],
   "features_radiology_dysfunction": [
     "Alveolar_xray",
@@ -54,9 +57,7 @@
     "Alveolar_cons",
     "Ground_glass_op",
     "Crazy_paving",
-    "Lymph_bulky",
-    "Vasopressors",
-    "Septic_shock"
+    "Lymph_bulky"
   ],
   "features_etiology": [
     "Etiology_Bacterial infection_Definitive diagnosis",

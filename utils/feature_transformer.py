@@ -110,6 +110,8 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
         df["Age_scaled"] = age_scaled
         df = df.drop(columns=["Age"])
         # df["Age_scaled_sq"] = age_scaled ** 2
+    if "Charlson_index" in df.columns:
+        df[df["Charlson_index"]> 22]  = 22
 
     if "Location_before_ICU" in df.columns:
         # Mapping numérique → catégorie textuelle
@@ -142,44 +144,41 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
 
     if "Dis_status HEM" in df.columns:
 
-        mapping = {
-            1: "minus 1 month",
-            2: "first line",
-            3: "more than 1 line",
-            4: "remission",
-            5: "uncontrolled",
-            6: "palliative"
+        # mapping = {
+        #     1: "minus 1 month",
+        #     2: "first line",
+        #     3: "more than 1 line",
+        #     4: "remission",
+        #     5: "uncontrolled",
+        #     6: "palliative"
 
-        }
-        df = apply_mapping(df, "Dis_status HEM", mapping)
+        # }
+        # df = apply_mapping(df, "Dis_status HEM", mapping)
+        df["Disease_status_inaugural"] = (df["Dis_status HEM"] == 1) | (df["Dis_status HEM"] == 2)
+        df["Disease_status_remission"] = (df["Dis_status HEM"] == 4) 
+        df["Disease_status_evolutive"] = (df["Dis_status HEM"] == 3) | (df["Dis_status HEM"] >= 5)
+        
+        
     if "Alveolar_xray" in df.columns:
-
         mapping = {
-
             1: "Focal",
             2: "Diffuse",
         }
         df = apply_mapping(df, "Alveolar_xray", mapping)
     if "Interst_xray" in df.columns:
-
         mapping = {
-
             1: "Focal",
             2: "Diffuse",
         }
         df = apply_mapping(df, "Interst_xray", mapping)
     if "Alveolar_cons" in df.columns:
-
         mapping = {
-
             1: "Focal",
             2: "Diffuse",
         }
         df = apply_mapping(df, "Alveolar_cons", mapping)
     if "Ground_glass_op" in df.columns:
-
         mapping = {
-
             1: "Focal",
             2: "Diffuse",
         }
@@ -211,6 +210,7 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
 
         df["Nodules_any"] = df[cols_nodules].max(axis=1)
         df = df.drop(columns=cols_nodules)
+
     cols_opacity = [
     "Ground_glass_op_Focal",
     "Ground_glass_op_Diffuse",
@@ -266,10 +266,24 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
         # df["Neutrophils_cat"] = _neutro_category(val)
         # df = df.drop(columns=["Neutrophils_num","Neutrophils_scaled"])
         # Verfier les données absurdes
+
+    # merging of same_signification columns 
     if "Vasopressors" in df.columns and "Septic_shock" in df.columns:
         df["Hypotension"] = (df["Septic_shock"] == 1) | (df["Vasopressors"] == 1)
         df = df.drop(columns=["Septic_shock","Vasopressors"])
+        
+    if "CT_Pleural_eff" in df.columns and "Pleural_eff" in df.columns:
+        df["Pleural_eff"] = (df["Pleural_eff"] == 1) | (df["CT_Pleural_eff"] == 1)
+        df = df.drop(columns=["CT_Pleural_eff"])
 
+    if "CT_Excavation" in df.columns and "Excavation" in df.columns:
+        df["Excavation"] = (df["CT_Excavation"] == 1) | (df["Excavation"] == 1)
+        df = df.drop(columns=["CT_Excavation"])
+
+    if "Alveolar_cons" in df.columns and "Alveolar_xray" in df.columns:
+        df["Alveolar"] = (df["Alveolar_cons"] == 1) | (df["Alveolar_xray"] == 1)
+        df = df.drop(columns=["Alveolar_cons","Alveolar_xray"])
+    
     return df
 
 
@@ -386,29 +400,14 @@ def _temp_to_cat(
 
 def _resp_severity(df: pd.DataFrame) -> pd.Series:
     """
-    0 = normal, 1 = léger, 2 = modéré, 3 = sévère.
+    0 = normal, 1 = léger.
     Règles:
       - Sinon, utiliser SpO2 si dispo: <88 -> 3, 88-91 -> 2, 92-94 -> 1, >=95 -> score selon RR
-      - Sinon, catégoriser par RR seul: <12 -> 1, 12-20 -> 0, 21-29 -> 1, >=30 -> 2
+      - Sinon, catégoriser par RR seul: <12 -> 2, 12-20 -> 0, 21-29 -> 1, >=30 -> 2
     """
     rr = pd.to_numeric(df.get("Resp_rate", pd.Series(index=df.index, dtype=float)), errors="coerce")
-    spo2 = pd.to_numeric(df.get("SpO2", df.get("Sp02", pd.Series(index=df.index, dtype=float))), errors="coerce")
     sev = pd.Series(0.0, index=df.index)
-    # Base on RR
-    sev[rr < 12] = 1.0
-    sev[(rr >= 12) & (rr <= 20)] = 0.0
-    sev[(rr >= 21) & (rr <= 29)] = 1.0
-    sev[(rr >= 30)  & (rr <= 39)] = 2.0
-    sev[(rr >= 40)  ] = 3.0
-    # Upgrade with SpO2 if available
-    if spo2 is not None and not spo2.isna().all():
-        sev[spo2 < 88] = 3.0
-        sev[(spo2 >= 88) & (spo2 <= 91)] = 2.0
-        sev[(spo2 >= 92) & (spo2 <= 94)] = 1.0
-        df = df.drop(columns=["SpO2"])
-
-
-    # Intubation overrides
+    sev[(rr >= 30) ] = 1
     df = df.drop(columns=["Resp_rate"])
     return sev
 

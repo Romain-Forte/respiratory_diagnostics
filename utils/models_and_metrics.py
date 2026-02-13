@@ -22,8 +22,15 @@ from sklearn.metrics import (
     brier_score_loss,
     fbeta_score
 )
+from tabpfn import TabPFNClassifier
 
-def get_models(y_train, imbalance_threshold=0.2, use_catboost=True, multilabel=False):
+
+def get_models(
+    y_train,
+    imbalance_threshold=0.2,
+    use_catboost=True,
+    multilabel=False
+):
     """
     Retourne un dictionnaire de modèles.
 
@@ -31,6 +38,7 @@ def get_models(y_train, imbalance_threshold=0.2, use_catboost=True, multilabel=F
         y_train: labels d'entraînement
         imbalance_threshold: seuil de déséquilibre
         use_catboost: inclure CatBoost ou non
+        use_tabpfn: inclure TabPFN si disponible
         multilabel: si True, enveloppe les modèles avec MultiOutputClassifier
     """
 
@@ -83,10 +91,9 @@ def get_models(y_train, imbalance_threshold=0.2, use_catboost=True, multilabel=F
                 eval_metric="logloss",
                 scale_pos_weight=scale_pos_weight
             ),
-
-            "LightGBM": LGBMClassifier(
-                class_weight="balanced",verbose=-1
-            ),
+            "TabPFN" : TabPFNClassifier(
+            device="cpu", ignore_pretraining_limits=True
+            )
 
 
 
@@ -108,7 +115,7 @@ def get_models(y_train, imbalance_threshold=0.2, use_catboost=True, multilabel=F
             "MLP Neural Net": MLPClassifier(max_iter=500),
             "Gaussian Naive Bayes": GaussianNB(),
             "XGBoost": XGBClassifier(eval_metric="logloss"),
-            "LightGBM": LGBMClassifier(verbose=-1)
+            "TabPFN" : TabPFNClassifier(device="cpu", ignore_pretraining_limits=True)
         }
         if use_catboost:
             from catboost import CatBoostClassifier
@@ -117,7 +124,6 @@ def get_models(y_train, imbalance_threshold=0.2, use_catboost=True, multilabel=F
                 verbose=0,
                 auto_class_weights="Balanced"
             )
-
     # Envelopper avec MultiOutputClassifier si multilabel
     if multilabel:
         models = {name: MultiOutputClassifier(model) for name, model in base_models.items()}
