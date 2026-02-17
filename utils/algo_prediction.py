@@ -114,7 +114,8 @@ def preparer_jeu_xy(
     X_train, X_test, y_train, y_test = train_test_split(
         X_al, y_clean, test_size=test_size, random_state=random_state, stratify=strat
     )
-
+    y_train = y_train.values.ravel()
+    y_test = y_test.values.ravel()
     return X_train, X_test, y_train, y_test, labels
 
 # =========================

@@ -5,6 +5,28 @@ import numpy as np
 from sklearn.metrics import auc, roc_curve, roc_auc_score
 import pandas as pd
 from matplotlib import cm
+from utils.models_and_metrics import negative_predictive_value
+
+def plot_model_bars(scores_dict, title):
+    """
+    Bar plot des scores par modèle.
+    """
+    model_names = list(scores_dict.keys())
+    scores = list(scores_dict.values())
+
+    plt.figure(figsize=(8, 6))
+    bars = plt.bar(model_names, scores)
+    plt.title(title)
+    plt.xlabel("Modèles")
+    plt.ylabel("Score")
+
+    plt.xticks(rotation=45)
+    for bar in bars:
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2, height, f"{height:.3f}", ha="center", va="bottom")
+
+    plt.tight_layout()
+    plt.show()
 
 def plot_multilabel_cooccurrence(
     df_labels: pd.DataFrame,
@@ -269,9 +291,12 @@ def show_metrics_binary(y_true, y_pred, threshold=0.5):
 def show_roc_curve(y_true, y_score, threshold=0.5, pos_label=1, to_print=True):
     """
     Trace la courbe ROC et retourne la ROC AUC.
+    Ajoute l'annotation NPV sur quelques points (seuils) de la courbe.
+
     - y_score : probabilités/scores (si 2D, prend la colonne de la classe 1)
     - y_true  : si non binaire, est binarisé avec `threshold`
     """
+
     from sklearn.metrics import roc_curve, roc_auc_score
 
     # Forcer en numpy float
@@ -295,8 +320,8 @@ def show_roc_curve(y_true, y_score, threshold=0.5, pos_label=1, to_print=True):
 
     # Plot
     plt.figure(figsize=(6, 6))
-    plt.plot(fpr, tpr, color="darkorange", lw=2, label=f"ROC curve (AUC = {roc_auc:.4f})")
-    plt.plot([0, 1], [0, 1], color="navy", lw=1, linestyle="--")
+    plt.plot(fpr, tpr, lw=2, label=f"ROC curve (AUC = {roc_auc:.4f})")
+    plt.plot([0, 1], [0, 1], lw=1, linestyle="--")
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.05])
     plt.xlabel("False Positive Rate")
@@ -305,22 +330,32 @@ def show_roc_curve(y_true, y_score, threshold=0.5, pos_label=1, to_print=True):
     plt.legend(loc="lower right")
     plt.grid(True)
 
-    # Annoter quelques points avec leur threshold associé
+    # Annoter quelques points avec threshold + NPV
     if len(fpr) > 0:
         nb_labels = min(10, len(fpr))
         idxs = np.linspace(0, len(fpr) - 1, nb_labels, dtype=int)
+
         for idx in idxs:
             thr = thresholds[idx]
-            thr_label = "inf" if np.isinf(thr) else f"{thr:.2f}"
-            plt.scatter(fpr[idx], tpr[idx], color="darkorange", s=20)
+
+            # Seuil inf -> prédire tout en 1, NPV pas très informatif; on peut le sauter
+            if np.isinf(thr):
+                continue
+
+            y_pred = (y_score >= thr).astype(int)
+
+            # Ta fonction doit exister dans le scope
+            npv = negative_predictive_value(y_true, y_pred)
+
+            plt.scatter(fpr[idx], tpr[idx], s=40)
+
             plt.text(
                 fpr[idx],
                 tpr[idx],
-                f"t={thr_label}",
+                f"t={thr:.2f}\nNPV={npv:.2f}",
                 fontsize=8,
                 ha="left",
                 va="bottom",
-                color="black",
             )
 
     plt.show()
@@ -328,6 +363,7 @@ def show_roc_curve(y_true, y_score, threshold=0.5, pos_label=1, to_print=True):
     if to_print:
         print(f"ROC AUC = {roc_auc:.4f}")
     return roc_auc
+
 
 
 def multilabel_roc(
