@@ -54,7 +54,7 @@ def analyse_sensibilite(pipeline,X_test,features,type_sensi= 'all'):
             estimator=pipeline,
             X=X_test,
             features=features,
-            kind="average",
+            kind="both",
             grid_resolution=50,
         )
 

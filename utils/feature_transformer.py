@@ -157,7 +157,7 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
         df["Disease_status_inaugural"] = (df["Dis_status HEM"] == 1) | (df["Dis_status HEM"] == 2)
         df["Disease_status_remission"] = (df["Dis_status HEM"] == 4) 
         df["Disease_status_evolutive"] = (df["Dis_status HEM"] == 3) | (df["Dis_status HEM"] >= 5)
-        
+        df = df.drop(columns = ["Dis_status HEM"])
         
     if "Alveolar_xray" in df.columns:
         mapping = {
@@ -215,7 +215,8 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
     "Ground_glass_op_Focal",
     "Ground_glass_op_Diffuse",
     "Crazy_paving",
-    "Interst_xray"]
+    'Interst_xray_Focal', 
+    'Interst_xray_Diffuse']
 
     if  all(c in df.columns for c in cols_opacity):
 
@@ -279,10 +280,16 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
     if "CT_Excavation" in df.columns and "Excavation" in df.columns:
         df["Excavation"] = (df["CT_Excavation"] == 1) | (df["Excavation"] == 1)
         df = df.drop(columns=["CT_Excavation"])
+    cols_alveolar = [
+        "Alveolar_cons_Focal",
+        "Alveolar_cons_Diffuse",
+        "Alveolar_xray_Focal",
+        'Alveolar_xray_Diffuse']
 
-    if "Alveolar_cons" in df.columns and "Alveolar_xray" in df.columns:
-        df["Alveolar"] = (df["Alveolar_cons"] == 1) | (df["Alveolar_xray"] == 1)
-        df = df.drop(columns=["Alveolar_cons","Alveolar_xray"])
+    if  all(c in df.columns for c in cols_alveolar):
+
+        df["Alveolar"] = df[cols_alveolar].max(axis=1)
+        df = df.drop(columns=cols_alveolar)
     
     return df
 
