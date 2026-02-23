@@ -98,6 +98,9 @@ ETIOLOGY_MAPPING: Dict[str, set] = {
     "Etiology_Undetermined cause_Definitive diagnosis": {"UNDETERMINED", "EMPTY EMPTY"},
 }
 
+def contains_keywords(text, keywords):
+    text = text.lower()
+    return any(keyword in text for keyword in keywords)
 
 def transform_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -290,7 +293,44 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
 
         df["Alveolar"] = df[cols_alveolar].max(axis=1)
         df = df.drop(columns=cols_alveolar)
-    
+    col_proph_anti_fongique = [
+        "Hem_mal_AML",
+        "HSCT_BMT_Allograft"
+    ]
+    if all(c in df.columns for c in col_proph_anti_fongique):
+        df["Indication_prophy_anti_fun"] = df[col_proph_anti_fongique].max(axis=1)
+    col_indic_pneumocystose = [
+        "Hem_mal_ALL",
+        "HSCT_BMT_Allograft",
+        "HSCT_BMT_Autograft",
+        "Hem_mal_Non_hodgkin_lymphoma",
+        "Ibr_Flu_Met",
+        #sklerodermi, granulomatosis, rheumatoid arthritis, wegener ou  artitisreumatoide ou good pasture syndrome
+        "Organ_transpl",
+        "Steroids_YN"
+
+    ]
+    if "Sys_dis_spec" in df.columns:
+        diseases = [
+            "sklerodermi",
+            "granulomatosis",
+            "rheumatoid arthritis",
+            "wegener",
+            "artitisreumatoide",
+            "good pasture syndrome"
+        ]
+        df["has_target_disease"] = df["Sys_dis_spec"].apply(
+                        lambda x: contains_keywords(x, diseases)
+                    )
+        df = df.drop(columns = ["Sys_dis_spec"])
+    if all(c in df.columns for c in col_indic_pneumocystose):
+        df["Indication_prophy_pneumocystose"] = df[col_indic_pneumocystose].max(axis=1)
+        if "has_target_disease" in df.columns:
+            df["Indication_prophy_pneumocystose"] = df[["Indication_prophy_pneumocystose",
+                                                        "has_target_disease"]].max(axis=1)
+            df = df.drop(columns = ["has_target_disease"])
+        
+
     return df
 
 
