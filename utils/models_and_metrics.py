@@ -23,7 +23,7 @@ from sklearn.metrics import (
     fbeta_score
 )
 from tabpfn import TabPFNClassifier
-
+import os 
 
 def get_models(
     y_train,
@@ -270,115 +270,6 @@ def get_metric(**kwargs):
 
     return metrics
 
-def compare_models_metric(
-    models: dict,
-    metric_fn,
-    X_train,
-    y_train,
-    X_test,
-    y_test,
-    needs_proba: bool = False,
-    metric_kwargs: dict | None = None,
-    metric_name: str | None = None
-):
-    """
-    Compare plusieurs modèles selon une métrique donnée.
-
-    Parameters
-    ----------
-    models : dict
-        Dictionnaire : {"nom": modele}
-    metric_fn : callable
-        Fonction de métrique sklearn ou perso. Ex: f1_score(y, y_pred)
-    X_train, y_train : training set
-    X_test, y_test : test set
-    needs_proba : bool
-        True si la métrique doit recevoir des probabilités (ex: roc_auc_score)
-        False si la métrique utilise des classes (ex: f1_score)
-    metric_kwargs : dict | None
-        Paramètres supplémentaires passés à la fonction de métrique
-        (ex: {"average": "weighted"} pour f1_score).
-    metric_name : str | None
-        Nom à utiliser pour la colonne des résultats. Si None, on tente de
-        récupérer __name__ ou le nom de la classe du callable.
-
-    Returns
-    -------
-    df_results : DataFrame
-        Tableau trié des modèles selon la métrique choisie.
-    """
-
-    metric_kwargs = metric_kwargs or {}
-    results = []
-
-    for name, model in models.items():
-        # print(f"\n🔄 Entraînement du modèle : {name}")
-
-        # --- Entraînement ---
-        try:
-            model.fit(X_train, y_train)
-        except Exception as e:
-            print(f"⚠️ {name} : erreur during training → ignoré.")
-            print(e)
-            continue
-
-        # --- Prédiction ---
-        try:
-            if needs_proba:
-                # On attend des probabilités
-                if not hasattr(model, "predict_proba"):
-                    print(f"⚠️ {name} : predict_proba manquant → ignoré.")
-                    continue
-
-                proba = model.predict_proba(X_test)
-
-                # MultiOutputClassifier renvoie une liste (une matrice par label).
-                if isinstance(proba, (list, tuple)):
-                    y_pred_input = np.column_stack(
-                        [p[:, 1] if getattr(p, "ndim", 1) > 1 else p for p in proba]
-                    )
-                elif isinstance(proba, np.ndarray) and proba.ndim == 3:
-                    y_pred_input = proba[:, :, 1]
-                elif isinstance(proba, np.ndarray) and proba.ndim == 2 and proba.shape[1] >= 2:
-                    y_pred_input = proba[:, 1]
-                else:
-                    print(f"⚠️ {name} : format de probabilités inattendu → ignoré.")
-                    continue
-
-            else:
-                # On attend des classes
-                if hasattr(model, "predict"):
-                    y_pred_input = model.predict(X_test)
-                else:
-                    print(f"⚠️ {name} : predict manquant → ignoré.")
-                    continue
-
-        except Exception as e:
-            print(f"⚠️ {name} : erreur prediction → ignoré.")
-            print(e)
-            continue
-
-        score = metric_fn(y_test, y_pred_input, **metric_kwargs)
-        
-
-        # print(f"➡️ {name} : {metric_fn.__name__} = {score:.4f}")
-        results.append((name, score))
-
-    # --- Tri ---
-    metric_label = (
-        metric_name
-        or getattr(metric_fn, "__name__", None)
-        or metric_fn.__class__.__name__
-    )
-    df_results = pd.DataFrame(results, columns=["Modèle", metric_label])
-    df_results = df_results.sort_values(metric_label, ascending=False)
-
-    print(f"\n🏆 CLASSEMENT DES MODÈLES PAR {metric_label.upper()} :\n")
-    print(df_results)
-
-    return df_results
-
-
 def f1_metric_xgb(preds, dtrain):
     y_true = dtrain.get_label()
     y_pred = (preds > 0.5).astype(int)
@@ -467,3 +358,21 @@ def get_models_multilabel(use_catboost=False):
 
     print(f"\n🏷️ Mode MULTILABEL spécialisé : {len(models)} modèles chargés")
     return models
+
+
+def save_best_combo_config(target_col, model_name, augmentation_name, metric_name, score, threshold,filepath = None):
+    """Sauvegarde les informations du meilleur combo dans un fichier config_<diagnosis>.yaml."""
+    if filepath is None:
+        filepath = os.getcwd() + '\\configs\\'
+    filename = f"config_{target_col}.yaml"
+    lines = [
+        f'diagnosis: "{target_col}"',
+        f'model: "{model_name}"' if model_name else 'model: null',
+        f'augmentation: "{augmentation_name}"' if augmentation_name else 'augmentation: null',
+        f'main_metric: "{metric_name}"',
+        f'score: {score if score is not None else "null"}',
+        f'threshold: {threshold}'
+    ]
+    with open(filepath + filename, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines) + '\n')
+    print(f"Configuration sauvegard?e dans {filename}")

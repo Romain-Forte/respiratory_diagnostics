@@ -1,0 +1,6 @@
+diagnosis: "Mucorales"
+model: "Random Forest"
+augmentation: "SMOTEENN"
+main_metric: "roc_auc"
+score: 0.7872585504164451
+threshold: 0.11

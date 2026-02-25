@@ -79,112 +79,74 @@ def shap_top10(model,
                dir_save="",
                max_display=15):
     """
-    Affiche les top features selon SHAP pour chaque classe, en conservant le signe
-    moyen des valeurs SHAP (bleu = effet positif, rouge = effet négatif).
+    Affiche les top features selon SHAP pour chaque sortie du modèle.
+    Flux simplifié : shap.Explainer -> bar chart + summary plot par classe.
     """
     feature_names = np.asarray(X_test.columns)
-    feature_matrix = np.asarray(X_test)
-    n_features = feature_names.shape[0]
-
-    def _flatten_shap(values):
-        arr = np.asarray(values)
-        if arr.ndim == 1:
-            if arr.size != n_features:
-                raise ValueError("Dimension des valeurs SHAP incompatible avec le nombre de features.")
-            return arr.reshape(1, n_features)
-        if arr.ndim == 2:
-            if arr.shape[1] == n_features:
-                return arr
-            if arr.shape[0] == n_features:
-                return arr.T
-        feature_axis = None
-        for axis, size in enumerate(arr.shape):
-            if size == n_features and (axis != 0 or arr.ndim == 1):
-                feature_axis = axis
-                break
-        if feature_axis is None:
-            for axis, size in enumerate(arr.shape):
-                if size == n_features:
-                    feature_axis = axis
-                    break
-        if feature_axis is None:
-            raise ValueError("Impossible d'identifier l'axe correspondant aux features dans les valeurs SHAP.")
-        arr = np.moveaxis(arr, feature_axis, -1)
-        arr = arr.reshape(-1, n_features)
-        return arr
-
-    explainer = None
-    if hasattr(model, "estimators_") and len(getattr(model, "estimators_", [])) > 0:
-        first_est = model.estimators_[0]
-        if hasattr(first_est, "tree_"):
-            try:
-                explainer = shap.TreeExplainer(model)
-            except Exception:
-                explainer = None
-
-    if explainer is None:
-        try:
-            explainer = shap.LinearExplainer(model, X_test)
-        except Exception:
-            explainer = shap.Explainer(model, X_test)
+    features_matrix = np.asarray(X_test)
 
     try:
-        shap_res = explainer.shap_values(X_test)
+        explainer = shap.Explainer(model, X_test)
     except Exception:
-        shap_res = explainer(X_test)
+        explainer = shap.TreeExplainer(model)
 
-    if isinstance(shap_res, shap.Explanation):
-        shap_arrays = [shap_res.values]
-    elif isinstance(shap_res, list):
-        shap_arrays = [np.asarray(values) for values in shap_res]
+    try:
+        shap_values = explainer(X_test)
+        values = np.asarray(shap_values.values)
+        data = np.asarray(shap_values.data)
+    except Exception:
+        values = np.asarray(explainer.shap_values(X_test))
+        data = features_matrix
+
+    if values.ndim == 2:
+        value_mats = [values]
+    elif values.ndim == 3:
+        value_mats = [values[:, i, :] for i in range(values.shape[1])]
     else:
-        shap_arrays = [np.asarray(shap_res)]
+        value_mats = [values.reshape(values.shape[0], -1)]
 
-    if not isinstance(col_names, (list, tuple, np.ndarray)):
+    if isinstance(col_names, (str, int)):
         col_names = [col_names]
     col_names = list(col_names)
-    if len(col_names) < len(shap_arrays):
-        col_names += [f"Classe {i}" for i in range(len(col_names), len(shap_arrays))]
+    if len(col_names) < len(value_mats):
+        col_names += [f"Classe {i}" for i in range(len(col_names), len(value_mats))]
 
-    for idx, shap_array in enumerate(shap_arrays):
-        flattened = _flatten_shap(shap_array)
-        mean_signed = flattened.mean(axis=0)
+    if to_save:
+        os.makedirs(dir_save, exist_ok=True)
+
+    for idx, shap_matrix in enumerate(value_mats):
+        mean_signed = shap_matrix.mean(axis=0)
         order = np.argsort(np.abs(mean_signed))[::-1][:top_n]
         top_features = feature_names[order]
         top_values = mean_signed[order]
         colors = ["tab:blue" if val >= 0 else "tab:red" for val in top_values]
 
         plt.figure(figsize=(8, 4))
-        plt.barh(top_features[::-1], top_values[::-1], color=list(colors[::-1]))
+        plt.barh(top_features[::-1], top_values[::-1], color=colors[::-1])
         plt.title(f"Top {top_n} SHAP - {col_names[idx]}")
         plt.xlabel("SHAP moyen")
         plt.tight_layout()
         if to_save:
-            os.makedirs(dir_save, exist_ok=True)
             plt.savefig(os.path.join(dir_save, f"{col_names[idx]}_shap_top{top_n}.png"))
             plt.close()
         else:
             plt.show()
 
+        summary_features = (
+            data[:, idx, :]
+            if data.ndim == 3 and data.shape[1] == len(value_mats)
+            else features_matrix
+        )
         plt.figure()
-        shap_for_plot = flattened
-        features_arg = feature_matrix
-        if features_arg.shape[0] != shap_for_plot.shape[0]:
-            if features_arg.shape[0] > shap_for_plot.shape[0]:
-                features_arg = features_arg[:shap_for_plot.shape[0]]
-            else:
-                repeats = int(np.ceil(shap_for_plot.shape[0] / features_arg.shape[0]))
-                features_arg = np.tile(features_arg, (repeats, 1))[:shap_for_plot.shape[0]]
         shap.summary_plot(
-            shap_for_plot,
-            features_arg,
+            shap_matrix,
+            summary_features,
             feature_names=feature_names,
             max_display=max_display,
             show=False,
         )
         plt.tight_layout()
         if to_save:
-            os.makedirs(dir_save, exist_ok=True)
             plt.savefig(os.path.join(dir_save, f"{col_names[idx]}_shap_summary.png"))
             plt.close()
         else:

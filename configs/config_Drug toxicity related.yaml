@@ -1,0 +1,6 @@
+diagnosis: "Drug toxicity related"
+model: "XGBoost"
+augmentation: "SMOTE"
+main_metric: "roc_auc"
+score: 0.7803643568034425
+threshold: 0.11

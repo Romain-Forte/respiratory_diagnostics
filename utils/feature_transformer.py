@@ -104,8 +104,16 @@ def contains_keywords(text, keywords):
 
 def transform_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-
-
+    cols_time = [ "Time H-ICU",
+    "TIME SYMPTOMES-ICU",
+    "Time  DG-ICU"]
+    for col in cols_time:
+        if col in df.columns:
+            df[col] = np.where(
+                    df[col] == 0,
+                    0,
+                    1 - 1 / df[col]
+                )
 
     # Age -> scale [0,1] + square
     if "Age" in df.columns:

@@ -1,0 +1,6 @@
+diagnosis: "Cardiogenic pulmonary oedema"
+model: "Logistic Regression"
+augmentation: "SMOTE"
+main_metric: "roc_auc"
+score: 0.7138328157349897
+threshold: 0.11

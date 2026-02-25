@@ -362,7 +362,7 @@ def show_roc_curve(y_true, y_score, threshold=0.5, pos_label=1, to_print=True):
 
     if to_print:
         print(f"ROC AUC = {roc_auc:.4f}")
-    return roc_auc
+    return fpr, tpr, thresholds
 
 
 
