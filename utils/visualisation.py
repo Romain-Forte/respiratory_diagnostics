@@ -288,13 +288,25 @@ def show_metrics_binary(y_true, y_pred, threshold=0.5):
     plt.xlabel("Classe prédite")
     plt.show()
 
-def show_roc_curve(y_true, y_score, threshold=0.5, pos_label=1, to_print=True):
+def show_roc_curve(
+    y_true,
+    y_score,
+    threshold=0.5,
+    pos_label=1,
+    to_print=True,
+    roc_points=None,
+    highlight_threshold=None,
+    highlight_label=None,
+    highlight_color="crimson",
+):
     """
     Trace la courbe ROC et retourne la ROC AUC.
     Ajoute l'annotation NPV sur quelques points (seuils) de la courbe.
 
     - y_score : probabilités/scores (si 2D, prend la colonne de la classe 1)
     - y_true  : si non binaire, est binarisé avec `threshold`
+    - roc_points : tuple optionnel (fpr, tpr, thresholds) pour éviter un recalcul
+    - highlight_threshold : valeur de seuil à mettre en évidence sur la courbe
     """
 
     from sklearn.metrics import roc_curve, roc_auc_score
@@ -314,8 +326,11 @@ def show_roc_curve(y_true, y_score, threshold=0.5, pos_label=1, to_print=True):
     else:
         y_true = y_true.astype(int)
 
-    # Calcul ROC
-    fpr, tpr, thresholds = roc_curve(y_true, y_score, pos_label=pos_label)
+    # Calcul ROC (ou ré-utilisation fournie)
+    if roc_points is not None:
+        fpr, tpr, thresholds = roc_points
+    else:
+        fpr, tpr, thresholds = roc_curve(y_true, y_score, pos_label=pos_label)
     roc_auc = roc_auc_score(y_true, y_score)
 
     # Plot
@@ -357,6 +372,30 @@ def show_roc_curve(y_true, y_score, threshold=0.5, pos_label=1, to_print=True):
                 ha="left",
                 va="bottom",
             )
+
+    # Mettre en avant un seuil spécifique (ex: Youden)
+    if highlight_threshold is not None and len(fpr) > 0:
+        highlight_idx = int(np.argmin(np.abs(thresholds - highlight_threshold)))
+        label_text = highlight_label or f"Seuil={thresholds[highlight_idx]:.2f}"
+        plt.scatter(
+            fpr[highlight_idx],
+            tpr[highlight_idx],
+            s=90,
+            color=highlight_color,
+            edgecolor="black",
+            linewidth=1.2,
+            zorder=5,
+            label=label_text
+        )
+        plt.annotate(
+            label_text,
+            (fpr[highlight_idx], tpr[highlight_idx]),
+            textcoords="offset points",
+            xytext=(10, -15),
+            fontsize=9,
+            color=highlight_color,
+            bbox=dict(boxstyle="round,pad=0.2", fc="white", ec=highlight_color, lw=0.8)
+        )
 
     plt.show()
 

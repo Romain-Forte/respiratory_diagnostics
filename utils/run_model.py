@@ -1,6 +1,7 @@
 
 from imblearn.pipeline import Pipeline
 from sklearn.base import clone
+from sklearn.metrics import roc_curve
 from pathlib import Path
 import re
 import numpy as np
@@ -73,10 +74,18 @@ def run_model_aug(model_name,
         print("Negative Predictive Value:", negative_predictive_value(y_test, y_pred_bin))
 
     if show_roc:
-        fpr, tpr, thresholds = show_roc_curve(y_test, y_pred)
+        fpr, tpr, thresholds = roc_curve(y_test, y_pred)
         j_scores = tpr - fpr
         idx = np.argmax(j_scores)
         youden_threshold = thresholds[idx]
+        show_roc_curve(
+            y_test,
+            y_pred,
+            roc_points=(fpr, tpr, thresholds),
+            highlight_threshold=youden_threshold,
+            highlight_label=f"Youden = {youden_threshold:.2f}",
+            highlight_color="crimson"
+        )
         y_pred_bin_roc = (y_pred > youden_threshold).astype(int)
         print("Negative Predictive Value youden:", negative_predictive_value(y_test, y_pred_bin_roc), 'threshold ',youden_threshold)
 
@@ -193,6 +202,14 @@ def run_config_for_target(target_col,
     augmentation_name = config.get("augmentation", "No Augmentation")
     MAIN_METRIC_NAME = config.get("main_metric", "roc_auc")
     THRESHOLD = config.get("threshold", 0.5)
+    random_seed = config.get("random_seed", 42)
+    if random_seed is None:
+        random_seed = 42
+    else:
+        try:
+            random_seed = int(random_seed)
+        except (TypeError, ValueError):
+            random_seed = 42
 
     if features_sensibilite is None:
         features_sensibilite = ["Neutropenie", "Prophylaxis_antifungal"]
@@ -202,7 +219,7 @@ def run_config_for_target(target_col,
 
     df_labels_1 = df_labels_fusion[target_col].to_frame()
     X_train, X_test, y_train, y_test, labels = preparer_jeu_xy(
-        df_features_clean, df_labels_1
+        df_features_clean, df_labels_1, random_state=random_seed
     )
 
     if condition_test is not None:
@@ -230,8 +247,8 @@ def run_config_for_target(target_col,
         print(f"Filtrage du jeu de test via condition_test -> {len(X_test)} échantillons.")
 
 
-    all_models = get_models(y_train, use_catboost=False, imbalance_threshold=1)
-    augmentations = get_augmentation_methods(random_state=0)
+    all_models = get_models(y_train, use_catboost=False, imbalance_threshold=1, random_state=random_seed)
+    augmentations = get_augmentation_methods(random_state=random_seed)
     metrics = get_metric()
 
 

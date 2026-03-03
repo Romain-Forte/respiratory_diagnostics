@@ -29,7 +29,8 @@ def get_models(
     y_train,
     imbalance_threshold=0.2,
     use_catboost=True,
-    multilabel=False
+    multilabel=False,
+    random_state=42
 ):
     """
     Retourne un dictionnaire de modèles.
@@ -68,28 +69,33 @@ def get_models(
         base_models = {
             "Logistic Regression": LogisticRegression(
                 class_weight="balanced",
-                max_iter=2000
+                max_iter=2000,
+                random_state=random_state
             ),
 
             "Random Forest": RandomForestClassifier(
                 class_weight="balanced",
-                n_estimators=300
+                n_estimators=300,
+                random_state=random_state
             ),
 
             "SVM RBF": SVC(
                 probability=True,
-                class_weight="balanced"
+                class_weight="balanced",
+                random_state=random_state
             ),
 
             "MLP Neural Net": MLPClassifier(
-                max_iter=500
+                max_iter=500,
+                random_state=random_state
             ),  # pas de class_weight pour MLPClassifier nativement
 
             "Gaussian Naive Bayes": GaussianNB(),  # no class_weight
 
             "XGBoost": XGBClassifier(
                 eval_metric="logloss",
-                scale_pos_weight=scale_pos_weight
+                scale_pos_weight=scale_pos_weight,
+                random_state=random_state
             ),
             "TabPFN" : TabPFNClassifier(
             device="cpu", ignore_pretraining_limits=True
@@ -103,18 +109,19 @@ def get_models(
 
             base_models["CatBoost"] = CatBoostClassifier(
                 verbose=0,
-                auto_class_weights="Balanced"
+                auto_class_weights="Balanced",
+                random_seed=random_state
             )
     else:
         print("🙂 Dataset équilibré → aucun class_weight ajouté\n")
 
         base_models = {
-            "Logistic Regression": LogisticRegression(max_iter=2000),
-            "Random Forest": RandomForestClassifier(n_estimators=300),
-            "SVM RBF": SVC(probability=True),
-            "MLP Neural Net": MLPClassifier(max_iter=500),
+            "Logistic Regression": LogisticRegression(max_iter=2000, random_state=random_state),
+            "Random Forest": RandomForestClassifier(n_estimators=300, random_state=random_state),
+            "SVM RBF": SVC(probability=True, random_state=random_state),
+            "MLP Neural Net": MLPClassifier(max_iter=500, random_state=random_state),
             "Gaussian Naive Bayes": GaussianNB(),
-            "XGBoost": XGBClassifier(eval_metric="logloss"),
+            "XGBoost": XGBClassifier(eval_metric="logloss", random_state=random_state),
             "TabPFN" : TabPFNClassifier(device="cpu", ignore_pretraining_limits=True)
         }
         if use_catboost:
@@ -122,7 +129,8 @@ def get_models(
 
             base_models["CatBoost"] = CatBoostClassifier(
                 verbose=0,
-                auto_class_weights="Balanced"
+                auto_class_weights="Balanced",
+                random_seed=random_state
             )
     # Envelopper avec MultiOutputClassifier si multilabel
     if multilabel:
@@ -360,7 +368,14 @@ def get_models_multilabel(use_catboost=False):
     return models
 
 
-def save_best_combo_config(target_col, model_name, augmentation_name, metric_name, score, threshold,filepath = None):
+def save_best_combo_config(target_col,
+                           model_name,
+                           augmentation_name,
+                           metric_name,
+                           score,
+                           threshold,
+                           random_seed=None,
+                           filepath = None):
     """Sauvegarde les informations du meilleur combo dans un fichier config_<diagnosis>.yaml."""
     if filepath is None:
         filepath = os.getcwd() + '\\configs\\'
@@ -371,7 +386,8 @@ def save_best_combo_config(target_col, model_name, augmentation_name, metric_nam
         f'augmentation: "{augmentation_name}"' if augmentation_name else 'augmentation: null',
         f'main_metric: "{metric_name}"',
         f'score: {score if score is not None else "null"}',
-        f'threshold: {threshold}'
+        f'threshold: {threshold}',
+        f'random_seed: {random_seed if random_seed is not None else "null"}'
     ]
     with open(filepath + filename, 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines) + '\n')

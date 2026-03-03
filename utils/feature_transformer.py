@@ -338,7 +338,21 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
                                                         "has_target_disease"]].max(axis=1)
             df = df.drop(columns = ["has_target_disease"])
         
+    bacterial_columns = ["BACTERIAL", "DG1","DG2"]
+    if all(c in df.columns for c in bacterial_columns):
+            dg1 = df["DG1"].fillna("").astype(str)
+            dg2 = df["DG2"].fillna("").astype(str)
 
+            df["Pneumonia_clinic"] = (
+                                        (df["BACTERIAL"] == 1.0) |
+                                        (dg1.str.contains("legionella", case=False, na=False)) |
+                                        (dg2.str.contains("legionella", case=False, na=False))
+                                    )
+            df["Pneumonia_microbio"] = ((df["BACTERIAL"] == 2.0) &
+                                                (~df["Pneumonia_clinic"])
+                                            )
+
+            df = df.drop(columns = bacterial_columns)
     return df
 
 

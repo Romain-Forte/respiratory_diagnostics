@@ -1,6 +1,7 @@
 diagnosis: "All fungus"
 model: "Random Forest"
-augmentation: "SMOTE"
+augmentation: "BorderlineSMOTE"
 main_metric: "roc_auc"
-score: 0.7908259233926128
+score: 0.7919313074066836
 threshold: 0.11
+random_seed: 42

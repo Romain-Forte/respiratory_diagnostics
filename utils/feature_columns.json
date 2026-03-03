@@ -80,5 +80,119 @@
     "hospital death",
   	"D90 DEATH"
 
-  ]
+  ],
+  "diagnostic_feature_sets": {
+    "default": {
+      "sections": [
+        "Liste_features_simple",
+        "features_radiology_dysfunction"
+      ],
+      "extra": [],
+      "exclude": []
+    },
+    "All fungus": {
+      "sections": [
+        "Liste_features_simple",
+        "features_radiology_dysfunction"
+      ],
+      "extra": [],
+      "exclude": []
+    },
+    "Bacterial infection": {
+      "sections": [
+        "Liste_features_simple",
+        "features_radiology_dysfunction"
+      ],
+      "extra": ["BACTERIAL", "DG1","DG2"],
+      "exclude": []
+    },
+    "Viral infection": {
+      "sections": [
+        "Liste_features_simple",
+        "features_radiology_dysfunction"
+      ],
+      "extra": [],
+      "exclude": []
+    },
+    "Invasive pulmonary aspergillosis": {
+      "sections": [
+        "Liste_features_simple",
+        "features_radiology_dysfunction"
+      ],
+      "extra": [],
+      "exclude": []
+    },
+    "Pneumocystis jirovecii infection": {
+      "sections": [
+        "Liste_features_simple",
+        "features_radiology_dysfunction"
+      ],
+      "extra": [],
+      "exclude": []
+    },
+    "Mucorales": {
+      "sections": [
+        "Liste_features_simple",
+        "features_radiology_dysfunction"
+      ],
+      "extra": [],
+      "exclude": []
+    },
+    "Other fungal ": {
+      "sections": [
+        "Liste_features_simple",
+        "features_radiology_dysfunction"
+      ],
+      "extra": [],
+      "exclude": []
+    },
+    "Other infection ": {
+      "sections": [
+        "Liste_features_simple",
+        "features_radiology_dysfunction"
+      ],
+      "extra": [],
+      "exclude": []
+    },
+    "Cardiogenic pulmonary oedema": {
+      "sections": [
+        "Liste_features_simple",
+        "features_radiology_dysfunction"
+      ],
+      "extra": [],
+      "exclude": []
+    },
+    "Drug toxicity related": {
+      "sections": [
+        "Liste_features_simple",
+        "features_radiology_dysfunction"
+      ],
+      "extra": [],
+      "exclude": []
+    },
+    "Disease-related infiltrates": {
+      "sections": [
+        "Liste_features_simple",
+        "features_radiology_dysfunction"
+      ],
+      "extra": [],
+      "exclude": []
+    },
+    "Transfusion-related acute lung injury": {
+      "sections": [
+        "Liste_features_simple",
+        "features_radiology_dysfunction"
+      ],
+      "extra": [],
+      "exclude": []
+    },
+    "Other non infectious causes": {
+      "sections": [
+        "Liste_features_simple",
+        "features_radiology_dysfunction"
+      ],
+      "extra": [],
+      "exclude": []
+    }
+  }
 }
