@@ -339,17 +339,22 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
             df = df.drop(columns = ["has_target_disease"])
         
     bacterial_columns = ["BACTERIAL", "DG1","DG2"]
+    # les pneumonie cliniquement documentée sont les "bacteria"=1 mais il y a une erreur. 
+    # Quand tu regardes les colonnes roses à gauche des jaune et appelés DG1,Dg2....
+    # certaines ont écrit "legionella" ces pneumonie là sont documentee et auraient dû être en  "bacteria"=2
+    # Donc pour faire l'analyse sur les pneumonie microbiologiquement documentée, 
+    # il faut prendre les bacteria == 2 +les legionelles de la colonne dg1ou dg2.
     if all(c in df.columns for c in bacterial_columns):
             dg1 = df["DG1"].fillna("").astype(str)
             dg2 = df["DG2"].fillna("").astype(str)
 
-            df["Pneumonia_clinic"] = (
-                                        (df["BACTERIAL"] == 1.0) |
-                                        (dg1.str.contains("legionella", case=False, na=False)) |
-                                        (dg2.str.contains("legionella", case=False, na=False))
+            df["Pneumonia_microbio"] = (
+                                        (df["BACTERIAL"] == 2.0) |
+                                        ((dg1.str.contains("legionella", case=False, na=False)) |
+                                        (dg2.str.contains("legionella", case=False, na=False)))
                                     )
-            df["Pneumonia_microbio"] = ((df["BACTERIAL"] == 2.0) &
-                                                (~df["Pneumonia_clinic"])
+            df["Pneumonia_clinic"] = ((df["BACTERIAL"] == 1.0) &
+                                                (~df["Pneumonia_microbio"])
                                             )
 
             df = df.drop(columns = bacterial_columns)
