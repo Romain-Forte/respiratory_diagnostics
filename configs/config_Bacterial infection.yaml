@@ -2,5 +2,6 @@ diagnosis: "Bacterial infection"
 model: "Random Forest"
 augmentation: "No Augmentation"
 main_metric: "roc_auc"
-score: 0.6877130617539696
-threshold: 0.11
+score: 0.822657200607383
+threshold: 0.43666666666666665
+random_seed: 42

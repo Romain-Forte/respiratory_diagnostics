@@ -310,7 +310,7 @@ class ScoreAliceModel:
             score += 1
 
         # 3) Symptômes > 7 jours
-        symptoms_gt_7_days = int(row["TIME SYMPTOMES-ICU"] > 7)
+        symptoms_gt_7_days = int(row["TIME SYMPTOMES-ICU"] >= 6/7)
         if symptoms_gt_7_days:
             score += 1
 
@@ -321,7 +321,7 @@ class ScoreAliceModel:
 
         # 5) Focal alveolar pattern
         focal_alveolar_pattern = int(
-            (row["Alveolar_xray_Focal"] == 1 or row["Alveolar_cons_Focal"] == 1)
+            (row["Alveolar"] == 1)
             and row["Quad_no"] == 1
         )
 
@@ -383,8 +383,108 @@ class ScoreAliceModel:
     @staticmethod
     def _ensure_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         if not isinstance(df, pd.DataFrame):
-            raise ValueError("`df` doit être un pandas.DataFrame.")
+                raise ValueError("`df` doit être un pandas.DataFrame.")
         return df
 
 
 Score_alice = ScoreAliceModel()
+
+
+class Scorepneumo:
+    """
+    Implémentation du score clinique "Pneumocystose" du papier suivant :
+    Azoulay, Roux, Vincent, et al.: A Prediction Score for Pneumocystis Pneumonia
+    """
+
+    _SCORE_MAX = 11.5
+
+    def __call__(self, row: pd.Series):
+        return self._score_row(row)
+
+    def _score_row(self, row: pd.Series):
+        score = 0
+        immuno = "others"
+        # 1) Immunosuppression
+        if row["Age"] >= 50:
+            score -= 1.5
+            if  row["Age"] > 70:
+                score -= 1
+        
+        # 2) lymphoproliferatif
+
+        if row["Hem_mal_CLL"] == 1 or row["Hem_mal_ALL"] == 1 or row["Hem_mal_Non_hodgkin_lymphoma"] == 1:
+            immuno = "lymphoproliferative"
+            score += 2
+        
+
+        # 3) Prophylaxie non prise
+        if row["Indication_prophy_pneumocystose"] == 1 and row["Prophylaxis_pneumocystis"] == 0 :
+            
+            score += 1 
+
+        # 4) SYmptomes-ICU
+        if row["TIME SYMPTOMES-ICU"] >= 2/3 : 
+            
+            score += 3
+
+        # 5) Shock sceptique
+        if row["Vasopressors"] == 1:
+            score -= 1.5
+
+        # 6) chest xray 
+
+        if    row[ "Interst_xray"] == 1 :
+            score += 2.5
+        # 7) Pleural_eff 
+
+        if    row[ "Pleural_eff"] == 1 :
+            score -= 2
+        
+        predicted_Pneumo = score >= 3  # ou strict ???
+
+        return (
+            {
+                "immunosuppression_category": immuno,
+            },
+            score,
+            predicted_Pneumo,
+        )
+
+    def predict(self, df: pd.DataFrame) -> pd.Series:
+        """
+        Calcule les prédictions booléennes pour l'ensemble des lignes d'un DataFrame.
+        """
+        df = self._ensure_dataframe(df)
+        preds = df.apply(lambda row: int(bool(self(row)[2])), axis=1)
+        return pd.Series(preds, index=df.index, name="Score_Pneumocystose")
+
+    def predict_proba(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Retourne une probabilité simplifiée: score / 12 (bornée entre 0 et 1).
+        """
+        df = self._ensure_dataframe(df)
+
+        def _proba(row):
+            _, score, _ = self(row)
+            proba = float(score) / self._SCORE_MAX
+            proba = max(0.0, min(1.0, proba))
+            return proba
+
+        proba_positive = df.apply(_proba, axis=1)
+        proba_df = pd.DataFrame(
+            {
+                "prob_negative": 1.0 - proba_positive,
+                "prob_positive": proba_positive,
+            },
+            index=df.index,
+        )
+        return proba_df
+
+    @staticmethod
+    def _ensure_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+        if not isinstance(df, pd.DataFrame):
+            raise ValueError("`df` doit être un pandas.DataFrame.")
+        return df
+
+
+Score_pneumo = Scorepneumo()

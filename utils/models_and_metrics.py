@@ -192,7 +192,50 @@ def negative_predictive_value(y_true, y_pred):
     if (TN + FN) == 0:
         return 0
 
-    return TN / (TN + FN)
+    return float( TN / (TN + FN))
+
+
+def positive_likelihood_ratio(y_true, y_pred):
+    """
+    LR+ = sensitivity / (1 - specificity)
+    """
+    y_true = np.array(y_true)
+    y_pred = np.array(y_pred)
+
+    TP = np.sum((y_true == 1) & (y_pred == 1))
+    FN = np.sum((y_true == 1) & (y_pred == 0))
+    TN = np.sum((y_true == 0) & (y_pred == 0))
+    FP = np.sum((y_true == 0) & (y_pred == 1))
+
+    sensitivity = TP / (TP + FN) if (TP + FN) else 0.0
+    specificity = TN / (TN + FP) if (TN + FP) else 0.0
+    denom = 1.0 - specificity
+
+    if denom == 0:
+        return float("inf")
+
+    return float(sensitivity / denom)
+
+
+def negative_likelihood_ratio(y_true, y_pred):
+    """
+    LR- = (1 - sensitivity) / specificity
+    """
+    y_true = np.array(y_true)
+    y_pred = np.array(y_pred)
+
+    TP = np.sum((y_true == 1) & (y_pred == 1))
+    FN = np.sum((y_true == 1) & (y_pred == 0))
+    TN = np.sum((y_true == 0) & (y_pred == 0))
+    FP = np.sum((y_true == 0) & (y_pred == 1))
+
+    sensitivity = TP / (TP + FN) if (TP + FN) else 0.0
+    specificity = TN / (TN + FP) if (TN + FP) else 0.0
+
+    if specificity == 0:
+        return float("inf")
+
+    return float((1.0 - sensitivity) / specificity)
 # ===========================
 #        FACTORY MÉTRIQUE
 # ===========================
@@ -239,6 +282,14 @@ def get_metric(**kwargs):
         },
         "negative_predictive_value": {
             "metric_fn": negative_predictive_value,
+            "needs_proba": False
+        },
+        "lr_positive": {
+            "metric_fn": positive_likelihood_ratio,
+            "needs_proba": False
+        },
+        "lr_negative": {
+            "metric_fn": negative_likelihood_ratio,
             "needs_proba": False
         },
 

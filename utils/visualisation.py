@@ -9,21 +9,48 @@ from utils.models_and_metrics import negative_predictive_value
 
 def plot_model_bars(scores_dict, title):
     """
-    Bar plot des scores par modèle.
+    Bar plot des scores par modèle. Les valeurs peuvent être :
+        - un float : moyenne sans écart-type
+        - un tuple/list (mean, std)
+        - un dict {"mean": m, "std": s}
     """
     model_names = list(scores_dict.keys())
-    scores = list(scores_dict.values())
+    raw_values = list(scores_dict.values())
+
+    means = []
+    stds = []
+    for value in raw_values:
+        mean = value
+        std = 0.0
+        if isinstance(value, dict):
+            mean = value.get("mean", value.get("avg_score", 0.0))
+            std = value.get("std", value.get("std_score", 0.0))
+        elif isinstance(value, (list, tuple)) and len(value) >= 2:
+            mean, std = value[0], value[1]
+        means.append(float(mean))
+        stds.append(abs(float(std)))
+
+    has_errors = any(std > 0 for std in stds)
 
     plt.figure(figsize=(8, 6))
-    bars = plt.bar(model_names, scores)
+    bars = plt.bar(
+        model_names,
+        means,
+        yerr=stds if has_errors else None,
+        capsize=5 if has_errors else None
+    )
     plt.title(title)
     plt.xlabel("Modèles")
     plt.ylabel("Score")
 
     plt.xticks(rotation=45)
-    for bar in bars:
+    for idx, bar in enumerate(bars):
         height = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width()/2, height, f"{height:.3f}", ha="center", va="bottom")
+        if stds[idx] > 0:
+            label = f"{height:.3f} ± {stds[idx]:.3f}"
+        else:
+            label = f"{height:.3f}"
+        plt.text(bar.get_x() + bar.get_width()/2, height, label, ha="center", va="bottom")
 
     plt.tight_layout()
     plt.show()

@@ -2,5 +2,6 @@ diagnosis: "Invasive pulmonary aspergillosis"
 model: "Random Forest"
 augmentation: "No Augmentation"
 main_metric: "roc_auc"
-score: 0.7472800140710588
+score: 0.6991444293683099
 threshold: 0.11
+random_seed: 42

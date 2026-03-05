@@ -262,7 +262,7 @@ def run_config_for_target(target_col,
         f"Modèle = {model_name} | Augmentation = {augmentation_name} | Métrique = {MAIN_METRIC_NAME}"
     )
 
-    return run_model_aug(
+    run_output = run_model_aug(
         model_name=model_name,
         base_model=base_model,
         augmentation_name=augmentation_name,
@@ -286,3 +286,52 @@ def run_config_for_target(target_col,
         type_sensi=type_sensi,
         verbose=True
     )
+
+    pipe_inference = run_output["pipe_inference"]
+    y_test_array = np.asarray(y_test)
+    y_pred_proba = None
+    try:
+        proba_raw = pipe_inference.predict_proba(X_test)
+    except AttributeError:
+        proba_raw = None
+
+    if proba_raw is not None:
+        if isinstance(proba_raw, list):
+            processed = []
+            for arr in proba_raw:
+                arr_np = np.asarray(arr)
+                if arr_np.ndim == 2 and arr_np.shape[1] > 1:
+                    processed.append(arr_np[:, 1])
+                else:
+                    processed.append(arr_np.ravel())
+            try:
+                y_pred_proba = np.column_stack(processed)
+            except ValueError:
+                y_pred_proba = None
+        else:
+            proba_np = np.asarray(proba_raw)
+            if proba_np.ndim == 2 and proba_np.shape[1] > 1:
+                y_pred_proba = proba_np[:, 1]
+            else:
+                y_pred_proba = proba_np.ravel()
+
+    if y_pred_proba is not None:
+        y_pred_discrete = (y_pred_proba > THRESHOLD).astype(int)
+    else:
+        y_pred_discrete = pipe_inference.predict(X_test)
+
+    metric_scores = {}
+    for metric_name, metric_info in metrics.items():
+        use_proba = metric_info["needs_proba"]
+        if use_proba and y_pred_proba is None:
+            print(f"Impossible de calculer {metric_name} (predict_proba indisponible).")
+            continue
+        preds_input = y_pred_proba if use_proba else y_pred_discrete
+        try:
+            metric_scores[metric_name] = metric_info["metric_fn"](y_test_array, preds_input)
+        except Exception as exc:
+            print(f"Impossible de calculer {metric_name} : {exc}")
+
+    run_output["metric_scores"] = metric_scores
+    return run_output
+
