@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 from sklearn.inspection import PartialDependenceDisplay
 import numpy as np
 import matplotlib.pyplot as plt
+from pathlib import Path
 
 
 def mean_pred(pipeline, X, proba_class_index=None):
@@ -40,7 +41,7 @@ def force_group_all_zero(X, group_cols):
     X2.loc[:, group_cols] = 0
     return X2
 
-def analyse_sensibilite(pipeline,X_test,features,type_sensi= 'all'):
+def analyse_sensibilite(pipeline,X_test,features,type_sensi= 'all', save_path=None):
 
     if  type_sensi == 'any':
         
@@ -66,15 +67,16 @@ def analyse_sensibilite(pipeline,X_test,features,type_sensi= 'all'):
 
         # --- Personnalisation de chaque sous-graphe ---
         for ax, feature in zip(disp.axes_.ravel(), features):
-
             ax.set_title(f"Effet de : {feature}", fontsize=11)
-
             ax.set_xlabel(f"Valeur de {feature}")
             ax.set_ylabel("Prédiction moyenne du modèle")
-
             ax.grid(True, alpha=0.3)
 
         plt.tight_layout()
+        if save_path:
+            save_path = Path(save_path)
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            disp.figure_.savefig(save_path, bbox_inches="tight")
         plt.show()
     else:
         raise NameError("Features is not of a list or str type")

@@ -3,17 +3,19 @@ from imblearn.pipeline import Pipeline
 from sklearn.base import clone
 from sklearn.metrics import roc_curve
 from pathlib import Path
-import re
 import numpy as np
 import os 
 from utils.algo_prediction import preparer_jeu_xy, AutoStandardScaler
 from utils.models_and_metrics import get_models, get_metric, negative_predictive_value
 from utils.visualisation import show_metrics_binary, show_roc_curve,plot_model_bars
 from utils.analyse_sensibilite import analyse_sensibilite
-from utils.feature_importance import  plot_top10_features_per_estimator,shap_top10
+from utils.feature_importance import  plot_top10_features_per_estimator,shap_top10,plot_top_odds_ratios
 from utils.data_aug import get_augmentation_methods
 import pandas as pd
-
+def _slugify(value):
+        clean = "".join(char if char.isalnum() else "_" for char in (value or ""))
+        clean = clean.strip("_")
+        return clean or "target"
 
 def run_model_aug(model_name,
                   base_model,
@@ -36,7 +38,9 @@ def run_model_aug(model_name,
                   sensibilite = False,
                   features_sensibilite =  ["Neutropenie", "Prophylaxis_antifungal"],
                   type_sensi = 'all',
-                  verbose = False):
+                  verbose = False,
+                  to_save = False,
+                  save_dir = None):
     """Entraine un modele avec une augmentation et affiche les details demandes."""
     if verbose:
         print("----- run_model_aug -----")
@@ -73,6 +77,13 @@ def run_model_aug(model_name,
     if verbose:
         print("Negative Predictive Value:", negative_predictive_value(y_test, y_pred_bin))
 
+    target_save_dir = None
+    if to_save:
+        if not save_dir:
+            raise ValueError("save_dir doit être fourni lorsque to_save=True.")
+        base_dir = Path(save_dir).expanduser()
+        target_save_dir = base_dir / _slugify(target_col)
+        target_save_dir.mkdir(parents=True, exist_ok=True)
     if show_roc:
         fpr, tpr, thresholds = roc_curve(y_test, y_pred)
         j_scores = tpr - fpr
@@ -84,22 +95,36 @@ def run_model_aug(model_name,
             roc_points=(fpr, tpr, thresholds),
             highlight_threshold=youden_threshold,
             highlight_label=f"Youden = {youden_threshold:.2f}",
-            highlight_color="crimson"
+            highlight_color="crimson",
+            save_path=str((target_save_dir / "roc_curve.png")) if target_save_dir is not None else None
         )
         y_pred_bin_roc = (y_pred > youden_threshold).astype(int)
         print("Negative Predictive Value youden:", negative_predictive_value(y_test, y_pred_bin_roc), 'threshold ',youden_threshold)
 
     if show_importance:
-        plot_top10_features_per_estimator(
-            pipe_train.named_steps["model"],
+        odds_dir = str(target_save_dir / "odds_ratios") if target_save_dir is not None else ""
+        plot_top_odds_ratios(
+            X_test,
+            y_test,
             feature_names=feature_names,
-            col_names=[target_col],
-            method=method_importance,
-            X_test=X_test,
-            y_test=y_test,
-            to_save=False,
-            dir_save='D:/graphs_bdd/importance'
+            top_n=10,
+            ridge_alpha=1.0,
+            n_bootstrap=200,
+            random_state=None,
+            to_save=to_save,
+            dir_save=odds_dir,
+            title=f"Top 10 odds ratios for {target_col}",
         )
+        # plot_top10_features_per_estimator(
+        #     pipe_train.named_steps["model"],
+        #     feature_names=feature_names,
+        #     col_names=[target_col],
+        #     method=method_importance,
+        #     X_test=X_test,
+        #     y_test=y_test,
+        #     to_save=False,
+        #     dir_save='D:/graphs_bdd/importance'
+        # )
 
     if show_shap:
         shap_top10(
@@ -135,9 +160,21 @@ def run_model_aug(model_name,
                 else:
                     y_pred_drop = pipe_inference_drop.predict(X_test_drop)
                 drop_scores[feature] = metric_fn(y_test, y_pred_drop)
-            plot_model_bars(drop_scores, title=f"Chute {MAIN_METRIC_NAME.upper()} lorsqu'on drop certaines colonnes ")
+            sensi_path = str(target_save_dir / "sensibilite_drop.png") if target_save_dir is not None else None
+            plot_model_bars(
+                drop_scores,
+                title=f"Chute {MAIN_METRIC_NAME.upper()} lorsqu'on drop certaines colonnes ",
+                save_path=sensi_path,
+            )
         else:
-            analyse_sensibilite(pipe_inference, X_test, features_sensibilite, type_sensi=type_sensi)
+            sensi_path = str(target_save_dir / f"sensibilite_{type_sensi}.png") if target_save_dir is not None else None
+            analyse_sensibilite(
+                pipe_inference,
+                X_test,
+                features_sensibilite,
+                type_sensi=type_sensi,
+                save_path=sensi_path,
+            )
 
     return {
         "score": score,
@@ -192,10 +229,14 @@ def run_config_for_target(target_col,
                           type_sensi = 'all',
                           method_importance = 'native_importance',
                           config_dir =  os.getcwd() + '\\configs\\',
-                          condition_test = None):
+                          condition_test = None,
+                          to_save = False,
+                          save_dir = None):
     """
     Recharge la configuration enregistrée pour target_col puis relance run_model_aug.
     condition_test : bool mask / index / callable (X_test, y_test) -> mask pour filtrer le set de test.
+    to_save : bool, si True sauvegarde les graphiques ROC et odds ratios.
+    save_dir : str ou Path, répertoire de sauvegarde des graphiques.
     """
     config, config_path = load_config_for_target(target_col, config_dir=config_dir)
     model_name = config.get("model")
@@ -247,7 +288,7 @@ def run_config_for_target(target_col,
         print(f"Filtrage du jeu de test via condition_test -> {len(X_test)} échantillons.")
 
 
-    all_models = get_models(y_train, use_catboost=False, imbalance_threshold=1, random_state=random_seed)
+    all_models = get_models(y_train, use_catboost=True, imbalance_threshold=0.2, random_state=random_seed)
     augmentations = get_augmentation_methods(random_state=random_seed)
     metrics = get_metric()
 
@@ -284,7 +325,9 @@ def run_config_for_target(target_col,
         sensibilite=sensibilite,
         features_sensibilite=features_sensibilite,
         type_sensi=type_sensi,
-        verbose=True
+        verbose=True,
+        to_save=to_save,
+        save_dir=save_dir
     )
 
     pipe_inference = run_output["pipe_inference"]

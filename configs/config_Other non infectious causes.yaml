@@ -1,6 +1,7 @@
 diagnosis: "Other non infectious causes"
-model: "Random Forest"
-augmentation: "RandomOverSampler"
+model: "CatBoost"
+augmentation: "No Augmentation"
 main_metric: "roc_auc"
-score: 0.7408274871568248
-threshold: 0.11
+score: 0.7557462851461085
+threshold: 0.5127499293812972
+random_seed: 42

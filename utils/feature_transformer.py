@@ -339,6 +339,7 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
             df = df.drop(columns = ["has_target_disease"])
         
     bacterial_columns = ["BACTERIAL", "DG1","DG2"]
+    # Ces colonnes sont à rajouter pour les bacterials
     # les pneumonie cliniquement documentée sont les "bacteria"=1 mais il y a une erreur. 
     # Quand tu regardes les colonnes roses à gauche des jaune et appelés DG1,Dg2....
     # certaines ont écrit "legionella" ces pneumonie là sont documentee et auraient dû être en  "bacteria"=2

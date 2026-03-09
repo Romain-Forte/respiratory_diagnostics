@@ -103,7 +103,7 @@
         "Liste_features_simple",
         "features_radiology_dysfunction"
       ],
-      "extra": ["BACTERIAL", "DG1","DG2"],
+      "extra": ["BACTERIAL", "DG1","DG2"],   
       "exclude": []
     },
     "Viral infection": {

@@ -1,6 +1,7 @@
 diagnosis: "Pneumocystis jirovecii infection"
-model: "Random Forest"
-augmentation: "No Augmentation"
+model: "CatBoost"
+augmentation: "SMOTEENN"
 main_metric: "roc_auc"
-score: 0.7505604756301479
-threshold: 0.11
+score: 0.7209227720319564
+threshold: 0.08756228675704687
+random_seed: 42

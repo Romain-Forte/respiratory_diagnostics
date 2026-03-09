@@ -1,3 +1,4 @@
+import os
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
@@ -6,8 +7,9 @@ from sklearn.metrics import auc, roc_curve, roc_auc_score
 import pandas as pd
 from matplotlib import cm
 from utils.models_and_metrics import negative_predictive_value
+from pathlib import Path
 
-def plot_model_bars(scores_dict, title):
+def plot_model_bars(scores_dict, title, save_path=None):
     """
     Bar plot des scores par modèle. Les valeurs peuvent être :
         - un float : moyenne sans écart-type
@@ -53,6 +55,10 @@ def plot_model_bars(scores_dict, title):
         plt.text(bar.get_x() + bar.get_width()/2, height, label, ha="center", va="bottom")
 
     plt.tight_layout()
+    if save_path:
+        save_path = Path(save_path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(save_path, bbox_inches="tight")
     plt.show()
 
 def plot_multilabel_cooccurrence(
@@ -325,6 +331,7 @@ def show_roc_curve(
     highlight_threshold=None,
     highlight_label=None,
     highlight_color="crimson",
+    save_path=None,
 ):
     """
     Trace la courbe ROC et retourne la ROC AUC.
@@ -362,14 +369,13 @@ def show_roc_curve(
 
     # Plot
     plt.figure(figsize=(6, 6))
-    plt.plot(fpr, tpr, lw=2, label=f"ROC curve (AUC = {roc_auc:.4f})")
+    plt.plot(fpr, tpr, lw=2, label=f"ROC curve (AUC = {roc_auc:.2f})")
     plt.plot([0, 1], [0, 1], lw=1, linestyle="--")
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.05])
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
     plt.title("ROC Curve")
-    plt.legend(loc="lower right")
     plt.grid(True)
 
     # Annoter quelques points avec threshold + NPV
@@ -387,23 +393,28 @@ def show_roc_curve(
             y_pred = (y_score >= thr).astype(int)
 
             # Ta fonction doit exister dans le scope
-            npv = negative_predictive_value(y_true, y_pred)
+            #npv = negative_predictive_value(y_true, y_pred)
 
-            plt.scatter(fpr[idx], tpr[idx], s=40)
+            #plt.scatter(fpr[idx], tpr[idx], s=40)
 
-            plt.text(
-                fpr[idx],
-                tpr[idx],
-                f"t={thr:.2f}\nNPV={npv:.2f}",
-                fontsize=8,
-                ha="left",
-                va="bottom",
-            )
+            # plt.text(
+            #     fpr[idx],
+            #     tpr[idx],
+            #     f"t={thr:.2f}\nNPV={npv:.2f}",
+            #     fontsize=8,
+            #     ha="left",
+            #     va="bottom",
+            # )
 
     # Mettre en avant un seuil spécifique (ex: Youden)
     if highlight_threshold is not None and len(fpr) > 0:
         highlight_idx = int(np.argmin(np.abs(thresholds - highlight_threshold)))
-        label_text = highlight_label or f"Seuil={thresholds[highlight_idx]:.2f}"
+        highlight_thr_value = thresholds[highlight_idx]
+        y_pred_highlight = (y_score >= highlight_thr_value).astype(int)
+        highlight_npv = negative_predictive_value(y_true, y_pred_highlight)
+
+        label_name = highlight_label or "Seuil mis en \u00e9vidence"
+        legend_label = f"{label_name} (NPV={highlight_npv:.2f})"
         plt.scatter(
             fpr[highlight_idx],
             tpr[highlight_idx],
@@ -412,10 +423,10 @@ def show_roc_curve(
             edgecolor="black",
             linewidth=1.2,
             zorder=5,
-            label=label_text
+            label=legend_label
         )
         plt.annotate(
-            label_text,
+            legend_label,
             (fpr[highlight_idx], tpr[highlight_idx]),
             textcoords="offset points",
             xytext=(10, -15),
@@ -424,10 +435,17 @@ def show_roc_curve(
             bbox=dict(boxstyle="round,pad=0.2", fc="white", ec=highlight_color, lw=0.8)
         )
 
+    plt.legend(loc="lower right")
+
+    if save_path:
+        save_path = Path(save_path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(save_path, bbox_inches="tight")
+
     plt.show()
 
     if to_print:
-        print(f"ROC AUC = {roc_auc:.4f}")
+        print(f"ROC AUC = {roc_auc:.2f}")
     return fpr, tpr, thresholds
 
 

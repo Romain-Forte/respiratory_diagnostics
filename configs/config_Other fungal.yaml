@@ -1,6 +1,7 @@
 diagnosis: "Other fungal"
 model: "Random Forest"
-augmentation: "SMOTETomek"
+augmentation: "SMOTEENN"
 main_metric: "roc_auc"
-score: 0.7305400343616018
-threshold: 0.11
+score: 0.7457001563298095
+threshold: 0.17333333333333334
+random_seed: 42

@@ -404,7 +404,7 @@ class Scorepneumo:
     def _score_row(self, row: pd.Series):
         score = 0
         immuno = "others"
-        # 1) Immunosuppression
+        # 1) Age
         if row["Age"] >= 50:
             score -= 1.5
             if  row["Age"] > 70:
@@ -433,7 +433,7 @@ class Scorepneumo:
 
         # 6) chest xray 
 
-        if    row[ "Interst_xray"] == 1 :
+        if   row[ "Alveolar_xray"] == 0 :
             score += 2.5
         # 7) Pleural_eff 
 
