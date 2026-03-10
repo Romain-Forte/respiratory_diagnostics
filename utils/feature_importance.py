@@ -6,6 +6,8 @@ import shap
 from sklearn.inspection import permutation_importance
 from sklearn.linear_model import LogisticRegression
 
+from utils.models_and_metrics import get_metric
+
 def feature_influence_sign(model, X, feature_names, epsilon=1e-4):
     signs = {}
 
@@ -107,6 +109,16 @@ def plot_top_odds_ratios(
     coefs = base_model.coef_.ravel()
     odds_ratios = np.exp(coefs)
 
+    metrics = get_metric()
+    roc_auc_info = metrics.get("roc_auc")
+    roc_auc_value = None
+    if roc_auc_info is not None:
+        if roc_auc_info["needs_proba"]:
+            y_pred_scores = base_model.predict_proba(X_matrix)[:, 1]
+        else:
+            y_pred_scores = base_model.predict(X_matrix)
+        roc_auc_value = roc_auc_info["metric_fn"](y_array, y_pred_scores)
+
     # Bootstrap pour intervalles de confiance
     rng = np.random.default_rng(random_state)
     boot_or = []
@@ -197,6 +209,18 @@ def plot_top_odds_ratios(
         ticks = sorted(set(ticks + [tick for tick in extra_ticks if x_min <= tick <= x_max]))
     ax.set_xticks(ticks)
     ax.set_xticklabels([f"{tick:.2f}" for tick in ticks])
+
+    if roc_auc_value is not None:
+        ax.text(
+            0.98,
+            0.02,
+            f"ROC AUC = {roc_auc_value:.3f}",
+            transform=ax.transAxes,
+            ha="right",
+            va="bottom",
+            fontsize=10,
+            bbox={"boxstyle": "round,pad=0.2", "facecolor": "white", "alpha": 0.7},
+        )
 
     plt.xlabel("Odds ratio")
     if title is None:

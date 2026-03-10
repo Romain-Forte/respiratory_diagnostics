@@ -39,6 +39,7 @@ def run_model_aug(model_name,
                   features_sensibilite =  ["Neutropenie", "Prophylaxis_antifungal"],
                   type_sensi = 'all',
                   verbose = False,
+                  text_save = None,
                   to_save = False,
                   save_dir = None):
     """Entraine un modele avec une augmentation et affiche les details demandes."""
@@ -79,10 +80,15 @@ def run_model_aug(model_name,
 
     target_save_dir = None
     if to_save:
+
         if not save_dir:
             raise ValueError("save_dir doit être fourni lorsque to_save=True.")
         base_dir = Path(save_dir).expanduser()
-        target_save_dir = base_dir / _slugify(target_col)
+
+        if text_save is not None:
+            target_save_dir = base_dir / _slugify(target_col) / text_save
+        else:
+            target_save_dir = base_dir / _slugify(target_col)
         target_save_dir.mkdir(parents=True, exist_ok=True)
     if show_roc:
         fpr, tpr, thresholds = roc_curve(y_test, y_pred)
@@ -230,6 +236,7 @@ def run_config_for_target(target_col,
                           method_importance = 'native_importance',
                           config_dir =  os.getcwd() + '\\configs\\',
                           condition_test = None,
+                          text_save = None,
                           to_save = False,
                           save_dir = None):
     """
@@ -326,6 +333,7 @@ def run_config_for_target(target_col,
         features_sensibilite=features_sensibilite,
         type_sensi=type_sensi,
         verbose=True,
+        text_save = text_save,
         to_save=to_save,
         save_dir=save_dir
     )

@@ -202,10 +202,10 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
             2: "Allograft"
         }
 
-        if "GvHD" in df.columns:
-            df["GvHD"] = pd.to_numeric(df["GvHD"], errors="coerce")
-            df["rejet_allograft"] = (df["GvHD"] == 1) & (df["HSCT_BMT"] == 2)
-            df = df.drop(columns=["GvHD"])
+        # if "GvHD" in df.columns:
+        #     df["GvHD"] = pd.to_numeric(df["GvHD"], errors="coerce")
+        #     df["rejet_allograft"] = (df["GvHD"] == 1) & (df["HSCT_BMT"] == 2)
+        #     df = df.drop(columns=["GvHD"])
         df = apply_mapping(df, "HSCT_BMT", mapping)
 
     if  "SOFA_Nervous" in df.columns:
@@ -301,12 +301,22 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
 
         df["Alveolar"] = df[cols_alveolar].max(axis=1)
         df = df.drop(columns=cols_alveolar)
+
     col_proph_anti_fongique = [
         "Hem_mal_AML",
         "HSCT_BMT_Allograft"
     ]
     if all(c in df.columns for c in col_proph_anti_fongique):
         df["Indication_prophy_anti_fun"] = df[col_proph_anti_fongique].max(axis=1)
+        # df["Indication_prophy_fungal_taken"] = (
+        #                                     (df["Indication_prophy_anti_fun"] == 1) &
+        #                                     (df["Prophylaxis_antifungal"] == 1)
+        #                                 )
+        # df["Indication_prophy_fungal_not_taken"] = (
+        #                                     (df["Indication_prophy_anti_fun"] == 1) &
+        #                                     (df["Prophylaxis_antifungal"] == 0)
+        #                                 )
+        # df = df.drop(columns = ["Indication_prophy_anti_fun","Prophylaxis_antifungal"])
     col_indic_pneumocystose = [
         "Hem_mal_ALL",
         "HSCT_BMT_Allograft",
@@ -337,6 +347,15 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
             df["Indication_prophy_pneumocystose"] = df[["Indication_prophy_pneumocystose",
                                                         "has_target_disease"]].max(axis=1)
             df = df.drop(columns = ["has_target_disease"])
+        df["Indication_prophy_pneumocystose_taken"] = (
+                                            (df["Indication_prophy_pneumocystose"] == 1) &
+                                            (df["Prophylaxis_pneumocystis"] == 1)
+                                        )
+        df["Indication_prophy_pneumocystose_not_taken"] = (
+                                            (df["Indication_prophy_pneumocystose"] == 1) &
+                                            (df["Prophylaxis_pneumocystis"] == 0)
+                                        )
+        df = df.drop(columns = ["Indication_prophy_pneumocystose","Prophylaxis_pneumocystis"])
         
     bacterial_columns = ["BACTERIAL", "DG1","DG2"]
     # Ces colonnes sont à rajouter pour les bacterials
