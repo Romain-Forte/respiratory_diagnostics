@@ -83,12 +83,11 @@ def run_model_aug(model_name,
 
         if not save_dir:
             raise ValueError("save_dir doit être fourni lorsque to_save=True.")
-        base_dir = Path(save_dir).expanduser()
-
         if text_save is not None:
-            target_save_dir = base_dir / _slugify(target_col) / text_save
+            target_save_dir = save_dir + _slugify(target_col) + text_save
         else:
-            target_save_dir = base_dir / _slugify(target_col)
+            target_save_dir = save_dir + _slugify(target_col)
+        target_save_dir = Path(target_save_dir)
         target_save_dir.mkdir(parents=True, exist_ok=True)
     if show_roc:
         fpr, tpr, thresholds = roc_curve(y_test, y_pred)

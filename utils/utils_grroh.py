@@ -20,8 +20,8 @@ def construire_mapping_renommage(colonnes_df):
     # mapping "cible" <- "source" & "type"
     mapping = [
         # Démographie
-        ("Sex", "SEXE", "rename"),
-        ("Age", "age", "rename"),
+        ("Sex", "SEXE", "rename"), #meme convention
+        ("Age", "age", "rename"), # il faudra juste le scale apres
 
         # Temps / délais
         ("Time H-ICU", "Time H-ICU", "rename"),
@@ -30,7 +30,8 @@ def construire_mapping_renommage(colonnes_df):
 
         # Hémato / oncologie / greffes
         ("Hem_mal", "Hemopathie", "regex"), #travail a faire sur nom_hemop et TyPHEMO 8 et 9 a merge 
-        ("HSCT_BMT", "ALLOGREFFE", "rename"),
+        ("HSCT_BMT_Allograft", "ALLOGREFFE", "rename"),
+        ("HSCT_BMT_Autograft", "AUTOGREFFE", "rename"),
         ("Sys_dis", "Maladie_syst", "rename"), # a retravailler selon type MS
         ("Solid_tumor", "TUMEURSOLIDE", "rename"),
         ("Organ_transpl", "greffe_organe_solide", "rename"),
@@ -44,7 +45,8 @@ def construire_mapping_renommage(colonnes_df):
         ("Prophylaxis_viral", "prophy_virus", "rename"),
 
         # Scores / clinique
-        ("SOFA_Nervous", "GCSSOFA_J1", "rename"),
+        ("Glasgow", "GLASGOW", "rename"),
+        ("Charlson", "Charlson_index", "rename"),
         ("SOFA_score", "SOFA", "rename"),
         ("Hemoptysis", "HEMOPTYSIE", "rename"),
 
@@ -54,25 +56,50 @@ def construire_mapping_renommage(colonnes_df):
         ("Temp", "TEMPMAX", "rename"),
         ("Leukocytes", "LEUCO", "rename"),
         ("Neutrophils", "NEUTROPENIE", "rename"),
+        ("PaO2/FiO2 VALUE VALUE", ["SPAO2FIO2", "PAO2FIO2_meca"], "aggregate"),# avec un mean 
 
-        # Scan il manque plein de variables la 
+        # Scanner et radio dans la TDM il y a plein de variables supplémentaires
         ("Quad_no", "NBQUADR", "rename"),
-        
+        ("Pleural_eff", ["RADIOTHOR_CHOICE_6", "RTDMTHOR_CHOICE_12"], "aggregate"), # pas sur du tout le 6 est plevre.
+        ("Excavation",["RADIOTHOR_CHOICE_7", "RTDMTHOR_CHOICE_11"], "aggregate"),
+        ("Septal_line", "RTDMTHOR_CHOICE_9", "rename"),
+        ("Halo_sign","RTDMTHOR_CHOICE_10", "rename"),
+        ("Lymph_bulky", "RTDMTHOR_CHOICE_18", "rename"),
+        ("GGO",["RADIOTHOR_CHOICE_4", "RTDMTHOR_CHOICE_1", "RTDMTHOR_CHOICE_2"], "aggregate"),# il manque crazy paving 
+        ("Nodules_any",["RADIOTHOR_CHOICE_5", "RTDMTHOR_CHOICE_3", "RTDMTHOR_CHOICE_4", "RTDMTHOR_CHOICE_5", "RTDMTHOR_CHOICE_6"], "aggregate"), 
+        ("Alveolar",["RADIOTHOR_CHOICE_1","RADIOTHOR_CHOICE_2","RADIOTHOR_CHOICE_3", "RTDMTHOR_CHOICE_7", "RTDMTHOR_CHOICE_8",], "aggregate"), 
+
         # Variables cibles non identifiables directement dans tes colonnes
-        ("Dis_status HEM", ["REM", "NCUR", "LCHIM"], "aggregate"), #pas sur, valeur de base a retravailler
+        ("Dis_status HEM", ["REM", "NCUR", "LCHIM"], "aggregate"), #Le lien avec 'Disease_status_inaugural', 'Disease_status_remission', 'Disease_status_evolutive' est a retravailler
         ("GvHD", "remarques_TTT", "regex"),#introuvable mais 2 lignes de remarques_TTT avec GvHD
         ("Drug_induced", None, "missing"), # a eclaircir, pas trouvé 
         ("Ibr_Flu_Met", "remarques_TTT", "regex"),# dans remarques_TTT ou type_IS fludarabine METOTREXATE Ibrutinib
         ("Tar_ther", None, "missing"),# pas trouvé
         ("Immunotherapy", None, "missing"),# pas trouvé
         ("Carttcells", None, "missing"),# pas trouvé
+        ("Vasopressors", None, "missing"),# pas trouvé
+        ("Septic_shock", None, "missing"),# pas trouvé, pour hypo tension en entrée de réa
         ("Prophylaxis_bacterial", None, "missing"),# pas trouvé
         ("Vaccins#Flu", None, "missing"), #pas trouvé
         ("Vaccins#COVID", None, "missing"), #pas trouvé
         ("Vaccins#Other", None, "missing"), #pas trouvé
 
-        # PaO2/FiO2 : pas un rename 1->1 (tu as 2 proxys)
-        ("PaO2/FiO2 VALUE VALUE", ["SPAO2FIO2", "PAO2FIO2_meca"], "aggregate"),# avec un mean 
+        #Diagnostiques sur DIAGPRINCIPAL_final
+        ('Diagnostique', "DIAGPRINCIPAL_final.recod", "regex"),
+
+        ('Bacterial infection', "2", "rename"),
+        ('Viral infection', "3", "rename"),
+        ("Invasive pulmonary aspergillosis", "14", "rename"),
+        ("All fungus", "5,6", "rename"),
+        ("Other fungal", "6", "rename"),
+        ("Mucorales", "?", "rename"),
+        ("Pneumocystis jirovecii infection", "4", "rename"),
+        ("Cardiogenic pulmonary oedema", "1", "rename"),
+        ("Disease-related infiltrates", "7", "rename"),
+        ("Drug toxicity related", "10", "rename"),
+        ("Other infection", "11", "rename"),
+        ("Other non infectious causes", "13 15 16", "rename"),
+
     ]
 
     def est_present(src):
