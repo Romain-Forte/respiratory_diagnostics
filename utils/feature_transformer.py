@@ -245,7 +245,7 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # Resp rate severity
     if "SpO2" in df.columns:
-       df["Sa02"] = sao2_hill(df["SpO2"])
+       df["SaO2"] = sao2_hill(df["SpO2"])
        df = df.drop(columns=["SpO2"])
 
     if "Resp_rate" in df.columns:
@@ -284,6 +284,10 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
         df["Hypotension"] = (df["Septic_shock"] == 1) | (df["Vasopressors"] == 1)
         df = df.drop(columns=["Septic_shock","Vasopressors"])
         
+    if "Drug_induced" in df.columns and "Immuno_drugs" in df.columns:
+        df["Immuno_drugs"] = (df["Drug_induced"] >= 1) | (df["Immuno_drugs"] >= 1)
+        df = df.drop(columns=["Drug_induced"])
+
     if "CT_Pleural_eff" in df.columns and "Pleural_eff" in df.columns:
         df["Pleural_eff"] = (df["Pleural_eff"] == 1) | (df["CT_Pleural_eff"] == 1)
         df = df.drop(columns=["CT_Pleural_eff"])

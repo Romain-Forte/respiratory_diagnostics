@@ -8,19 +8,21 @@
     "delai_symptome_rea",
     "delai_diag_patho",
 
-    "Hemopathie",
+    "TYPHEMO",
     "REM", "NCUR"  ,
     "AUTOGREFFE",
     "ALLOGREFFE",
 
-
+    "CORTICO",
+    "Charlson",
 
     "DCHIM", "LCHIM", 
 
     "Maladie_syst",
     "TUMEURSOLIDE",
     "greffe_organe_solide",
-    "IMMUNSUP","Type_IS",
+    "IMMUNSUP",
+    "Type_IS",
 
     "prphy_pcp",
     "prophy_antifung",
@@ -35,7 +37,9 @@
     "TEMPMAX",
     "SPAO2FIO2",
     "NEUTROPENIE",
-    "LEUCO"
+    "PAO2FIO2_meca",
+    "LEUCO",
+    "remarques_TTT"
 
 
   ],

@@ -1,5 +1,78 @@
+import math
+from typing import Optional
+
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+
+TRUE_LIKE = {"1", "true", "vrai", "yes", "oui", "y", "t"}
+FALSE_LIKE = {"0", "false", "faux", "no", "non", "n", "f"}
+
+
+def _normalize_binary_value(value):
+    if value is None:
+        return np.nan
+    if isinstance(value, (bool, np.bool_)):
+        return int(value)
+    if isinstance(value, (int, np.integer)):
+        if value in (0, 1):
+            return int(value)
+        return value
+    if isinstance(value, (float, np.floating)):
+        if np.isnan(value):
+            return np.nan
+        if value in (0.0, 1.0):
+            return int(value)
+        return value
+    text = str(value).strip()
+    if not text:
+        return np.nan
+    lowered = text.lower()
+    if lowered in TRUE_LIKE:
+        return 1
+    if lowered in FALSE_LIKE:
+        return 0
+    return text
+
+
+def _print_binary_occurrence_diff(
+    col_name,
+    serie_left,
+    serie_right,
+    total_left,
+    total_right,
+    min_diff_pct: float,
+):
+    left_clean = serie_left.apply(_normalize_binary_value).dropna()
+    right_clean = serie_right.apply(_normalize_binary_value).dropna()
+    combined = pd.concat([left_clean, right_clean], ignore_index=True).dropna()
+    if combined.empty:
+        return False, False
+    unique_vals = pd.unique(combined)
+    if len(unique_vals) > 2:
+        return False, False
+
+    stats = []
+    should_print = False
+    for val in sorted(unique_vals, key=lambda v: str(v)):
+        left_count = left_clean.eq(val).sum()
+        right_count = right_clean.eq(val).sum()
+        left_pct = (left_count / total_left * 100) if total_left else 0.0
+        right_pct = (right_count / total_right * 100) if total_right else 0.0
+        diff = left_pct - right_pct
+        stats.append((val, left_count, right_count, left_pct, right_pct, diff))
+        if abs(diff) >= min_diff_pct:
+            should_print = True
+
+    if should_print:
+        print(f"[{col_name}] difference d'occurrence >= {min_diff_pct} pts")
+        for val, left_count, right_count, left_pct, right_pct, diff in stats:
+            print(
+                f"    valeur={val!r}: {left_count}/{total_left} ({left_pct:.2f}%) "
+                f"vs {right_count}/{total_right} ({right_pct:.2f}%) -> diff {diff:+.2f} pts"
+            )
+
+    return True, should_print
 
 def analyser_nan(df: pd.DataFrame, top_n: int = 10, plot: bool = True) -> dict:
     """
@@ -205,3 +278,174 @@ def convert_types(df):
                 if df[col].isin(['True', 'False', 'true', 'false']).all():
                     df[col] = df[col].map(lambda x: str(x).lower() == 'true')
     return df
+
+def compare_columns(df1, df2):
+    cols1 = set(df1.columns)
+    cols2 = set(df2.columns)
+
+    only_in_df1 = cols1 - cols2
+    only_in_df2 = cols2 - cols1
+
+    print("Colonnes uniquement dans df1 :")
+    print(only_in_df1)
+
+    print("\nColonnes uniquement dans df2 :")
+    print(only_in_df2)
+
+
+def plot_column_histograms(
+    df_left: pd.DataFrame,
+    df_right: pd.DataFrame,
+    columns=None,
+    bins: int = 30,
+    cols_per_row: int = 3,
+    figsize_per_col=(4, 3),
+    density: bool = False,
+    label_left: str = "dataset_1",
+    label_right: str = "dataset_2",
+    alpha: float = 0.6,
+    suptitle: Optional[str] = None,
+    min_diff_pct: float = 5.0,
+):
+    """
+    Compare la distribution de chaque colonne numerique via histogrammes superposes.
+
+    Parameters
+    ----------
+    df_left : pd.DataFrame
+        Premier jeu de donnees.
+    df_right : pd.DataFrame
+        Second jeu de donnees (meme schema attendu).
+    columns : list, optional
+        Sous-ensemble de colonnes a visualiser. Par defaut toutes les colonnes communes.
+    bins : int, optional
+        Nombre de bacs de l'histogramme (defaut 30).
+    cols_per_row : int, optional
+        Nombre de sous-graphiques par ligne (defaut 3).
+    figsize_per_col : tuple, optional
+        Taille (largeur, hauteur) d'un sous-graphe en pouces (defaut (4, 3)).
+    density : bool, optional
+        Si False (defaut), affiche les pourcentages de lignes par classe d'histogramme.
+        Si True, trace les densites (aire = 1) via matplotlib.
+    label_left / label_right : str, optional
+        Etiquettes de legende pour les deux jeux de donnees.
+    alpha : float, optional
+        Transparence des histogrammes (defaut 0.6).
+    suptitle : str, optional
+        Titre global de la figure.
+    min_diff_pct : float, optional
+        Seuil minimal (en points de pourcentage) pour afficher les differences
+        d'occurrence des variables binaires dans la console.
+
+    Returns
+    -------
+    (fig, axes) : tuple
+        Figure matplotlib et matrice d'axes generes.
+
+    Notes
+    -----
+    - Les hauteurs des histogrammes (mode par defaut) representent le pourcentage
+      de lignes du DataFrame complet.
+    - Les colonnes contenant au plus deux valeurs distinctes (apres normalisation
+      des booleens usuels) ne sont pas tracees : la difference d'occurrence est
+      imprimee dans la console uniquement si elle depasse `min_diff_pct`; sinon
+      le sous-graphe indique que l'ecart est inferieur au seuil.
+    """
+    if columns is None:
+        columns = list(df_left.columns)
+    else:
+        columns = list(columns)
+
+    if not columns:
+        raise ValueError("Aucune colonne disponible pour la comparaison.")
+
+    missing_left = [col for col in columns if col not in df_left.columns]
+    missing_right = [col for col in columns if col not in df_right.columns]
+    if missing_left or missing_right:
+        raise ValueError(
+            f"Colonnes absentes. df_left manques: {missing_left}, df_right manques: {missing_right}"
+        )
+
+    n_cols = len(columns)
+    rows = math.ceil(n_cols / cols_per_row)
+    fig_width = max(2, cols_per_row * figsize_per_col[0])
+    fig_height = max(2, rows * figsize_per_col[1])
+    fig, axes = plt.subplots(rows, cols_per_row, figsize=(fig_width, fig_height), squeeze=False)
+    axes_flat = axes.ravel()
+    total_rows_left = len(df_left)
+    total_rows_right = len(df_right)
+
+    for idx, col in enumerate(columns):
+        ax = axes_flat[idx]
+        is_binary, printed = _print_binary_occurrence_diff(
+            col,
+            df_left[col],
+            df_right[col],
+            total_rows_left,
+            total_rows_right,
+            min_diff_pct=min_diff_pct,
+        )
+        if is_binary:
+            ax.set_title(str(col))
+            ax.axis("off")
+            if printed:
+                text = "Variable binaire\nvoir console"
+            else:
+                text = f"Variable binaire\nDelta < {min_diff_pct:.1f} pts"
+            ax.text(0.5, 0.5, text, ha="center", va="center")
+            continue
+
+        serie_left = pd.to_numeric(df_left[col], errors="coerce").dropna().astype(float)
+        serie_right = pd.to_numeric(df_right[col], errors="coerce").dropna().astype(float)
+
+        plotted = False
+        if not serie_left.empty:
+            weights_left = None
+            if not density and total_rows_left > 0:
+                weights_left = np.ones(len(serie_left), dtype=float) / total_rows_left * 100
+            ax.hist(
+                serie_left,
+                bins=bins,
+                alpha=alpha,
+                density=density,
+                weights=weights_left,
+                label=label_left,
+                color="tab:blue",
+            )
+            plotted = True
+        if not serie_right.empty:
+            weights_right = None
+            if not density and total_rows_right > 0:
+                weights_right = np.ones(len(serie_right), dtype=float) / total_rows_right * 100
+            ax.hist(
+                serie_right,
+                bins=bins,
+                alpha=alpha,
+                density=density,
+                weights=weights_right,
+                label=label_right,
+                color="tab:orange",
+            )
+            plotted = True
+
+        if not plotted:
+            ax.text(0.5, 0.5, "Pas de donnees\nnumeriques", ha="center", va="center")
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+        ax.set_title(str(col))
+        if plotted:
+            if not density:
+                ax.set_ylabel("% des lignes")
+            ax.legend(loc="best")
+
+    for ax in axes_flat[n_cols:]:
+        ax.axis("off")
+
+    if suptitle:
+        fig.suptitle(suptitle)
+        fig.tight_layout(rect=(0, 0, 1, 0.96))
+    else:
+        fig.tight_layout()
+
+    return fig, axes
