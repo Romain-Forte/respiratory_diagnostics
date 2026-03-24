@@ -114,7 +114,11 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
                     0,
                     1 - 1 / df[col]
                 )
-
+    #Clip GvHD 
+    if "GvHD" in df.columns:
+        df["GvHD"] = pd.to_numeric(df["GvHD"], errors="coerce")
+        df.loc[df["GvHD"] >= 1,"GvHD"] = 1 
+    
     # Age -> scale [0,1] + square
     if "Age" in df.columns:
         age_scaled, vmin, vmax = _scale_minmax(df["Age"])
@@ -208,9 +212,6 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
         #     df = df.drop(columns=["GvHD"])
         df = apply_mapping(df, "HSCT_BMT", mapping)
 
-    if  "SOFA_Nervous" in df.columns:
-        df = df.rename(columns={"SOFA_Nervous": "Glasgow"})
-        
     cols_nodules = [
     "CT_nodules#Centrolobular",
     "CT_nodules#Peribronchovascular",

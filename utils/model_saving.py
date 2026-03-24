@@ -48,11 +48,7 @@ def save_model(
         Le chemin du fichier cree.
     """
     target_path = _model_path(diagnostic, model_dir, create=True)
-    if target_path.exists() and not overwrite:
-        raise FileExistsError(
-            f"Un modele existe deja pour '{diagnostic}' ({target_path})."
-            " Utilisez overwrite=True pour le remplacer."
-        )
+
 
     payload = {
         "diagnostic": diagnostic,
@@ -61,7 +57,9 @@ def save_model(
         "pipe_inference": pipe_inference or pipe_train,
         "metadata": metadata or {},
     }
-    joblib.dump(payload, target_path)
+    if  not target_path.exists() or overwrite:
+        
+        joblib.dump(payload, target_path)
     return target_path
 
 

@@ -47,10 +47,10 @@ def _print_binary_occurrence_diff(
     right_clean = serie_right.apply(_normalize_binary_value).dropna()
     combined = pd.concat([left_clean, right_clean], ignore_index=True).dropna()
     if combined.empty:
-        return False, False
+        return False, False, []
     unique_vals = pd.unique(combined)
     if len(unique_vals) > 2:
-        return False, False
+        return False, False, []
 
     stats = []
     should_print = False
@@ -67,12 +67,15 @@ def _print_binary_occurrence_diff(
     if should_print:
         print(f"[{col_name}] difference d'occurrence >= {min_diff_pct} pts")
         for val, left_count, right_count, left_pct, right_pct, diff in stats:
+            highest_pct = max(left_pct, right_pct)
+            variation_pct = (abs(diff) / highest_pct * 100) if highest_pct > 0 else 0.0
             print(
                 f"    valeur={val!r}: {left_count}/{total_left} ({left_pct:.2f}%) "
-                f"vs {right_count}/{total_right} ({right_pct:.2f}%) -> diff {diff:+.2f} pts"
+                f"vs {right_count}/{total_right} ({right_pct:.2f}%) -> diff {diff:+.2f} pts "
+                f"({variation_pct:.1f}% de la valeur max {highest_pct:.2f}%)"
             )
 
-    return True, should_print
+    return True, should_print, stats
 
 def analyser_nan(df: pd.DataFrame, top_n: int = 10, plot: bool = True) -> dict:
     """
@@ -347,9 +350,9 @@ def plot_column_histograms(
     - Les hauteurs des histogrammes (mode par defaut) representent le pourcentage
       de lignes du DataFrame complet.
     - Les colonnes contenant au plus deux valeurs distinctes (apres normalisation
-      des booleens usuels) ne sont pas tracees : la difference d'occurrence est
-      imprimee dans la console uniquement si elle depasse `min_diff_pct`; sinon
-      le sous-graphe indique que l'ecart est inferieur au seuil.
+      des booleens usuels) sont exclues du graphique. Les differences d'occurrence
+      au-dessus de `min_diff_pct` sont detaillees dans la console; les deltas plus
+      faibles declenchent un court rappel signalant que la colonne a ete ignoree.
     """
     if columns is None:
         columns = list(df_left.columns)
@@ -366,18 +369,12 @@ def plot_column_histograms(
             f"Colonnes absentes. df_left manques: {missing_left}, df_right manques: {missing_right}"
         )
 
-    n_cols = len(columns)
-    rows = math.ceil(n_cols / cols_per_row)
-    fig_width = max(2, cols_per_row * figsize_per_col[0])
-    fig_height = max(2, rows * figsize_per_col[1])
-    fig, axes = plt.subplots(rows, cols_per_row, figsize=(fig_width, fig_height), squeeze=False)
-    axes_flat = axes.ravel()
     total_rows_left = len(df_left)
     total_rows_right = len(df_right)
 
-    for idx, col in enumerate(columns):
-        ax = axes_flat[idx]
-        is_binary, printed = _print_binary_occurrence_diff(
+    numeric_columns = []
+    for col in columns:
+        is_binary, printed, _ = _print_binary_occurrence_diff(
             col,
             df_left[col],
             df_right[col],
@@ -386,14 +383,23 @@ def plot_column_histograms(
             min_diff_pct=min_diff_pct,
         )
         if is_binary:
-            ax.set_title(str(col))
-            ax.axis("off")
-            if printed:
-                text = "Variable binaire\nvoir console"
-            else:
-                text = f"Variable binaire\nDelta < {min_diff_pct:.1f} pts"
-            ax.text(0.5, 0.5, text, ha="center", va="center")
+            if not printed:
+                print(f"[{col}] variable binaire ignoree (|Delta| < {min_diff_pct:.1f} pts)")
             continue
+        numeric_columns.append(col)
+
+    if not numeric_columns:
+        raise ValueError("Toutes les colonnes selectionnees sont binaires; rien a tracer.")
+
+    n_cols = len(numeric_columns)
+    rows = math.ceil(n_cols / cols_per_row)
+    fig_width = max(2, cols_per_row * figsize_per_col[0])
+    fig_height = max(2, rows * figsize_per_col[1])
+    fig, axes = plt.subplots(rows, cols_per_row, figsize=(fig_width, fig_height), squeeze=False)
+    axes_flat = axes.ravel()
+
+    for idx, col in enumerate(numeric_columns):
+        ax = axes_flat[idx]
 
         serie_left = pd.to_numeric(df_left[col], errors="coerce").dropna().astype(float)
         serie_right = pd.to_numeric(df_right[col], errors="coerce").dropna().astype(float)

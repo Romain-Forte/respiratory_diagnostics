@@ -46,7 +46,7 @@ def construire_mapping_renommage(colonnes_df):
         ("Prophylaxis_viral", "prophy_virus", "rename"),
 
         # Scores / clinique
-        ("Glasgow", "GLASGOW", "rename"),
+        ("SOFA_Nervous", "GLASGOW", "special"),
         ("Charlson_index", "Charlson", "rename"),
         ("SOFA_score", "SOFA", "rename"),
         ("Hemoptysis", "HEMOPTYSIE", "rename"),
@@ -187,6 +187,9 @@ def format_to_efraim(df: pd.DataFrame, mapping_df: pd.DataFrame) -> pd.DataFrame
     # Hem_mal
         
     mapping = {
+         0: 0,
+           1:1,
+           2:2,
            3 : 4,
            4:5,
            5:8,
@@ -203,8 +206,81 @@ def format_to_efraim(df: pd.DataFrame, mapping_df: pd.DataFrame) -> pd.DataFrame
 
     #PaO2/FiO2 pas fou 
     df_exit["PaO2/FiO2 VALUE VALUE"] = df["PAO2FIO2_meca"]  
+     
+    # Sofa nervous
+    df_exit["SOFA_Nervous"] = 0
+    df["GLASGOW"] = pd.to_numeric(df["GLASGOW"], errors="coerce")
+    df_exit.loc[df["GLASGOW"] < 6,"SOFA_Nervous"] += 1
+    df_exit.loc[df["GLASGOW"] < 10,"SOFA_Nervous"] += 1
+    df_exit.loc[df["GLASGOW"] < 13,"SOFA_Nervous"] += 1
+    df_exit.loc[df["GLASGOW"] < 15,"SOFA_Nervous"] += 1
 
+    # SaO2 pour avoir en % 
+    df_exit["SaO2"] = pd.to_numeric(df_exit["SaO2"], errors="coerce")
+    df_exit["SaO2"] = df_exit["SaO2"]/ 100
+
+    
     #Diagnostiques sur DIAGPRINCIPAL_final
+    raw_to_category = {
+        "bact": "Bactérien",
+        "bact docu": "Bactérien microbiologiquement documenté",
+        "extra": "ARDS",
+        "infiltratif": "Spécifique",
+        "bact cli": "Bactérien cliniquement documenté",
+        "influenza": "Virus",
+        "pcp": "Pneumocystis",
+        "aspiration": "Aspiration",
+        "virus": "Virus",
+        "candidemie": "IFI autre",
+        "airways": "Autre",
+        "pleura": "Autre",
+        "tox": "Toxicité (DRPT)",
+        "ipa": "Aspergillus, IFI",
+        "copd": "Autre",
+        "autre": "Autre",
+        "api": "Aspergillus, IFI",
+        "vrs": "Virus",
+        "ep": "Embolism",
+        "pe": "Embolism",
+        "drpt": "Toxicité (DRPT)",
+        "rhinovirus": "Virus",
+        "cmv": "Virus",
+        "metapneumovirus": "Virus",
+        "coronavirus": "Virus",
+        "piv3": "Virus",
+        "piv3-metapneumo": "Virus",
+        "parasite": "Infectieux autre",
+        "adenovirus": "Virus",
+        "bk": "Mycoactérie ou infectieux autre",
+        "trichosporon": "Infectieux autre",
+        "bact docu + cand": "Bactérien + IFI autre",
+        "enterovirus": "Virus",
+        "mucor": "IFI autre",
+        "neut recov": "ARDS",
+        "hsv": "Virus",
+    }
+    
+    # 2) mapping catégorie -> code numérique
+    category_to_code = {
+        "Bactérien": 2,
+        "Bactérien microbiologiquement documenté": 2,
+        "ARDS": 1,
+        "Spécifique": 7,  
+        "Bactérien cliniquement documenté":2,
+        "Virus": 3,
+        "Pneumocystis": 4,
+        "Aspiration": 14,
+        "IFI autre": 5,
+        "Autre": 13,
+        "Toxicité (DRPT)": 10,
+        "Toxic": 10,       # fusionné avec Toxicité (DRPT)
+        "Aspergillus, IFI": 14,
+        "Embolism": ,
+        "Infectieux autre": 11,
+        "Mycoactérie ou infectieux autre": 11,
+        "Bactérien + IFI autre": 11,
+    }
+
     df_exit['Bacterial infection'] = (df["DIAGPRINCIPAL_final.recod"]  == 2) | (df["DIAGPRINCIPAL_final.recod"]  == 9)
     df_exit['Viral infection'] = (df["DIAGPRINCIPAL_final.recod"]  == 3)
     df_exit['Invasive pulmonary aspergillosis'] = (df["DIAGPRINCIPAL_final.recod"]  == 14)
