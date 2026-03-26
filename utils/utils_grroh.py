@@ -219,7 +219,6 @@ def format_to_efraim(df: pd.DataFrame, mapping_df: pd.DataFrame) -> pd.DataFrame
     df_exit["SaO2"] = pd.to_numeric(df_exit["SaO2"], errors="coerce")
     df_exit["SaO2"] = df_exit["SaO2"]/ 100
 
-    
     #Diagnostiques sur DIAGPRINCIPAL_final
     raw_to_category = {
         "bact": "Bactérien",
@@ -255,9 +254,20 @@ def format_to_efraim(df: pd.DataFrame, mapping_df: pd.DataFrame) -> pd.DataFrame
         "trichosporon": "Infectieux autre",
         "bact docu + cand": "Bactérien + IFI autre",
         "enterovirus": "Virus",
-        "mucor": "IFI autre",
+        "mucor": "mucor",
         "neut recov": "ARDS",
         "hsv": "Virus",
+        # Diag2
+        "fusariose":"IFI autre",
+        "pcp/ipa" : "Pneumocystis",
+        "ifi conclusion" : "IFI autre",
+        "candid√©mie" : "IFI autre",
+        "metapneumo" : "Virus",
+        "samr" : "Bactérien",
+        "metapneumo" : "Virus",
+        "vrs-meta" : "Virus",
+        
+
     }
     
     # 2) mapping catégorie -> code numérique
@@ -269,30 +279,38 @@ def format_to_efraim(df: pd.DataFrame, mapping_df: pd.DataFrame) -> pd.DataFrame
         "Bactérien cliniquement documenté":2,
         "Virus": 3,
         "Pneumocystis": 4,
-        "Aspiration": 14,
-        "IFI autre": 5,
+        "Aspiration": 13,
+        "IFI autre": 6,
         "Autre": 13,
         "Toxicité (DRPT)": 10,
-        "Toxic": 10,       # fusionné avec Toxicité (DRPT)
         "Aspergillus, IFI": 14,
-        "Embolism": ,
+        "Embolism": 13,
         "Infectieux autre": 11,
         "Mycoactérie ou infectieux autre": 11,
         "Bactérien + IFI autre": 11,
+        "mucor" : 17
     }
-
-    df_exit['Bacterial infection'] = (df["DIAGPRINCIPAL_final.recod"]  == 2) | (df["DIAGPRINCIPAL_final.recod"]  == 9)
-    df_exit['Viral infection'] = (df["DIAGPRINCIPAL_final.recod"]  == 3)
-    df_exit['Invasive pulmonary aspergillosis'] = (df["DIAGPRINCIPAL_final.recod"]  == 14)
-    df_exit['All fungus'] = (df["DIAGPRINCIPAL_final.recod"]  == 5) | (df["DIAGPRINCIPAL_final.recod"]  == 6)
-    df_exit['Other fungal'] =  (df["DIAGPRINCIPAL_final.recod"]  == 6)
-    df_exit['Mucorales'] = 0
-    df_exit['Pneumocystis jirovecii infection'] = (df["DIAGPRINCIPAL_final.recod"]  == 4)
-    df_exit['Cardiogenic pulmonary oedema'] = (df["DIAGPRINCIPAL_final.recod"]  == 1)
-    df_exit['Disease-related infiltrates'] = (df["DIAGPRINCIPAL_final.recod"]  == 7)
-    df_exit['Drug toxicity related'] = (df["DIAGPRINCIPAL_final.recod"]  == 10)
-    df_exit['Other infection'] = (df["DIAGPRINCIPAL_final.recod"]  == 11)
-    df_exit['Other non infectious causes'] = (df["DIAGPRINCIPAL_final.recod"]  == 13) | (df["DIAGPRINCIPAL_final.recod"]  == 15) | (df["DIAGPRINCIPAL_final.recod"]  == 16)
+    
+    # création de la catégorie puis du code
+    df["diag1"] = df["DIAGPRINCIPAL_final.recod"].str.lower().map(raw_to_category)
+    df["diag2"] = df["DIAG2"].str.lower().map(raw_to_category)
+    df["diag1_code"] = df["diag1"].map(category_to_code).fillna(0).astype(int)
+    df["diag2_code"] = df["diag2"].map(category_to_code).fillna(0).astype(int)
+    # df_exit["diag1_code"] = df["diag1"].map(category_to_code).fillna(0).astype(int)
+    # df_exit["diag2_code"] = df["diag2"].map(category_to_code).fillna(0).astype(int)
+    L_col_diag = ["diag1_code","diag2_code","DIAGPRINCIPAL_final.recod"]
+    df_exit['Bacterial infection'] = (df[L_col_diag]  == 2).any(axis=1) | (df[L_col_diag]  == 9).any(axis=1)
+    df_exit['Viral infection'] = (df[L_col_diag]  == 3).any(axis=1)
+    df_exit['Invasive pulmonary aspergillosis'] = (df[L_col_diag]  == 14).any(axis=1)
+    df_exit['All fungus'] = (df[L_col_diag]  == 5).any(axis=1) | (df[L_col_diag]  == 6).any(axis=1)
+    df_exit['Other fungal'] =  (df[L_col_diag]  == 6).any(axis=1)
+    df_exit['Mucorales'] =  (df[L_col_diag]  == 17).any(axis=1)
+    df_exit['Pneumocystis jirovecii infection'] = (df[L_col_diag]  == 4).any(axis=1)
+    df_exit['Cardiogenic pulmonary oedema'] = (df[L_col_diag]  == 1).any(axis=1)
+    df_exit['Disease-related infiltrates'] = (df[L_col_diag]  == 7).any(axis=1)
+    df_exit['Drug toxicity related'] = (df[L_col_diag]  == 10).any(axis=1)
+    df_exit['Other infection'] = (df[L_col_diag]  == 11).any(axis=1)
+    df_exit['Other non infectious causes'] = (df[L_col_diag]  == 13).any(axis=1) | (df[L_col_diag]  == 15).any(axis=1) | (df[L_col_diag]  == 16).any(axis=1)
 
     # 5) None values
     none_rows = mapping_df[mapping_df["type"] == 'missing']

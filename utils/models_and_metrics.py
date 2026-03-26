@@ -315,15 +315,15 @@ def get_metric(**kwargs):
         # =======================
         # MULTILABEL CUSTOM
         # =======================
-        "at_least_one_correct": {
-            "metric_fn": at_least_one_correct,
-            "needs_proba": False
-        },
+        # "at_least_one_correct": {
+        #     "metric_fn": at_least_one_correct,
+        #     "needs_proba": False
+        # },
 
-        "reject_n_lowest_correct": {
-            "metric_fn": lambda yt, yp: reject_n_lowest_correct(yt, yp, n=n),
-            "needs_proba": True
-        }
+        # "reject_n_lowest_correct": {
+        #     "metric_fn": lambda yt, yp: reject_n_lowest_correct(yt, yp, n=n),
+        #     "needs_proba": True
+        # }
     }
     return metrics
 

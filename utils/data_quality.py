@@ -354,6 +354,8 @@ def plot_column_histograms(
       au-dessus de `min_diff_pct` sont detaillees dans la console; les deltas plus
       faibles declenchent un court rappel signalant que la colonne a ete ignoree.
     """
+    df_left = df_left.copy()
+    df_right = df_right.copy()
     if columns is None:
         columns = list(df_left.columns)
     else:
@@ -382,6 +384,12 @@ def plot_column_histograms(
             total_rows_right,
             min_diff_pct=min_diff_pct,
         )
+        if "time" in col.lower():
+            df_right[col] =  np.maximum(np.minimum(1 / (1 - df_right[col]),50),0)
+            df_left[col] =  np.maximum( np.minimum(1 / (1 - df_left[col] ),50),0)
+        if 'age' in col.lower():
+            df_right[col] = 94 *  df_right[col]
+            df_left[col] =  94 * df_left[col]
         if is_binary:
             if not printed:
                 print(f"[{col}] variable binaire ignoree (|Delta| < {min_diff_pct:.1f} pts)")

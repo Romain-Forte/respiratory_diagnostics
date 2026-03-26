@@ -104,6 +104,7 @@ def contains_keywords(text, keywords):
 
 def transform_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
+
     cols_time = [ "Time H-ICU",
     "TIME SYMPTOMES-ICU",
     "Time  DG-ICU"]

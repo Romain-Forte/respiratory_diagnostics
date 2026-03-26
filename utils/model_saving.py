@@ -33,6 +33,7 @@ def save_model(
     model_dir: Optional[str | Path] = None,
     metadata: Optional[Dict[str, Any]] = None,
     overwrite: bool = False,
+    youden_threshold = 0.5
 ) -> Path:
     """Sauvegarde un pipeline d'entrainement/inference pour un diagnostic.
 
@@ -56,6 +57,7 @@ def save_model(
         "pipe_train": pipe_train,
         "pipe_inference": pipe_inference or pipe_train,
         "metadata": metadata or {},
+        "Youden_threshold" : youden_threshold,
     }
     if  not target_path.exists() or overwrite:
         

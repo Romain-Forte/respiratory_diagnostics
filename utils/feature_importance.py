@@ -210,17 +210,6 @@ def plot_top_odds_ratios(
     ax.set_xticks(ticks)
     ax.set_xticklabels([f"{tick:.2f}" for tick in ticks])
 
-    if roc_auc_value is not None:
-        ax.text(
-            0.98,
-            0.02,
-            f"ROC AUC = {roc_auc_value:.3f}",
-            transform=ax.transAxes,
-            ha="right",
-            va="bottom",
-            fontsize=10,
-            bbox={"boxstyle": "round,pad=0.2", "facecolor": "white", "alpha": 0.7},
-        )
 
     plt.xlabel("Odds ratio")
     if title is None:
