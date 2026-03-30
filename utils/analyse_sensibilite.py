@@ -116,7 +116,6 @@ def analyse_sensibilite(pipeline,X_test,features,type_sensi= 'all', save_path=No
         plot_X = X_test
         plot_features = features
         plot_estimator = pipeline
-        grid_resolution = 20
         custom_values = None
 
         if isinstance(features, (list, tuple)):
@@ -132,7 +131,6 @@ def analyse_sensibilite(pipeline,X_test,features,type_sensi= 'all', save_path=No
             plot_X = hemato_series.to_frame(name="hemato")
             plot_features = ["hemato"]
             plot_estimator = _HematoPDPProxy(pipeline, X_test, list(features))
-            grid_resolution = 2
             custom_values = {0: np.array([0.0, 1.0])}
         elif isinstance(features, str):
             plot_features = [features]
@@ -145,7 +143,7 @@ def analyse_sensibilite(pipeline,X_test,features,type_sensi= 'all', save_path=No
             X=plot_X,
             features=plot_features,
             kind="both",
-            grid_resolution=grid_resolution,
+            # grid_resolution=grid_resolution,
             custom_values=custom_values,
             subsample=None,
             pd_line_kw=pd_line_style,
@@ -163,7 +161,7 @@ def analyse_sensibilite(pipeline,X_test,features,type_sensi= 'all', save_path=No
             ax.set_title(f"Effet de : {feature}", fontsize=11)
             ax.set_xlabel(f"Valeur de {feature}")
             ax.set_ylabel("Prédiction moyenne du modèle")
-            ax.grid(True, alpha=0.3)
+            # ax.grid(True, alpha=0.3)
 
         plt.tight_layout()
         if save_path:

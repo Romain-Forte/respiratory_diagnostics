@@ -310,7 +310,7 @@ def _find_best_combo_from_splits(
             ax.set_ylabel("True Positive Rate")
             ax.set_title(f"ROC - meilleures augmentations ({target_col})")
             ax.legend(loc="lower right")
-            ax.grid(True)
+            ax.grid(False)
             fig.tight_layout()
 
             if to_save and target_save_dir is not None:

@@ -376,7 +376,7 @@ def show_roc_curve(
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
     plt.title("ROC Curve")
-    plt.grid(True)
+    plt.grid(False)
 
     # Annoter quelques points avec threshold + NPV
     if len(fpr) > 0:
@@ -584,7 +584,7 @@ def multilabel_roc(
         ax.set_ylabel("TPR (True Positive Rate)")
         ax.set_title("ROC multi-label")
         ax.legend(loc="lower right")
-        ax.grid(True, linestyle=":", linewidth=0.7)
+        ax.grid(False, linestyle=":", linewidth=0.7)
 
         plt.tight_layout()
 
