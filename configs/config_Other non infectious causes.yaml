@@ -1,7 +1,7 @@
 diagnosis: "Other non infectious causes"
 model: "CatBoost"
-augmentation: "No Augmentation"
+augmentation: "SMOTETomek"
 main_metric: "roc_auc"
-score: 0.7557462851461085
-threshold: 0.5127499293812972
+score: 0.7532732224770642
+threshold: 0.32104794601831566
 random_seed: 42

@@ -1,7 +1,7 @@
 diagnosis: "Bacterial infection"
 model: "CatBoost"
-augmentation: "SMOTETomek"
+augmentation: "No Augmentation"
 main_metric: "roc_auc"
-score: 0.8227539897227558
-threshold: 0.5296049175045118
+score: 0.6848552858469293
+threshold: 0.4709809697058849
 random_seed: 42

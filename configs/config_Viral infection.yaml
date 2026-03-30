@@ -1,7 +1,7 @@
 diagnosis: "Viral infection"
 model: "Random Forest"
-augmentation: "SMOTETomek"
+augmentation: "SMOTE"
 main_metric: "roc_auc"
-score: 0.7603396209372695
-threshold: 0.38666666666666666
+score: 0.7583192075511465
+threshold: 0.36666666666666664
 random_seed: 42

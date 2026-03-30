@@ -2,6 +2,6 @@ diagnosis: "Drug toxicity related"
 model: "CatBoost"
 augmentation: "SMOTEENN"
 main_metric: "roc_auc"
-score: 0.7738758958007647
-threshold: 0.06676165275003368
+score: 0.7519804355565186
+threshold: 0.039236739286179025
 random_seed: 42

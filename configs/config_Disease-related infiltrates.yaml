@@ -2,6 +2,6 @@ diagnosis: "Disease-related infiltrates"
 model: "Random Forest"
 augmentation: "RandomOverSampler"
 main_metric: "roc_auc"
-score: 0.8184688249054206
-threshold: 0.23
+score: 0.814524503999769
+threshold: 0.22666666666666666
 random_seed: 42

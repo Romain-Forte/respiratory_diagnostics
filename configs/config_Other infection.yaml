@@ -1,0 +1,7 @@
+diagnosis: "Other infection"
+model: "Random Forest"
+augmentation: "RandomOverSampler"
+main_metric: "roc_auc"
+score: 0.701740338688667
+threshold: 0.056666666666666664
+random_seed: 42
