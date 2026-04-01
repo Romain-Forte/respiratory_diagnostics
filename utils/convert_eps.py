@@ -40,7 +40,7 @@ def convert_png_to_eps(png_path: str | Path) -> Path:
 
 if __name__ == "__main__":
     #png_path = r"C:\Users\romai\Desktop\travail\avancement\model_grid_search\Invasive_pulmonary_aspergillosis\roc_curve.png"
-    dir_path = r"C:\Users\romai\Desktop\travail\avancement\model_grid_search\Pneumocystis_jirovecii_infection\\"
+    dir_path = r"C:\Users\romai\Desktop\travail\avancement\model_grid_search\\"
     dir_path = Path(dir_path)
     print(dir_path)
     for fichier in dir_path.rglob("*"):
