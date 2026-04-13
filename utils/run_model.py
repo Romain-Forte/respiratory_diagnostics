@@ -17,6 +17,7 @@ from utils.data_aug import get_augmentation_methods
 from utils.feature_importance import plot_top_odds_ratios, shap_top10
 from utils.models_and_metrics import get_metric, get_models, negative_predictive_value, save_best_combo_config
 from utils.visualisation import plot_model_bars, show_roc_curve
+from utils.calibration import CalibratedModel
 
 
 # ---------------------------------------------------------------------------
@@ -160,11 +161,36 @@ def _export_model_bars(scores_dict, title, output_path):
 # Single-run evaluation
 # ---------------------------------------------------------------------------
 
-def run_model_aug(model_name, base_model, augmentation_name, augmentation, X_train, X_test, y_train, y_test,
-                  MAIN_METRIC_NAME, metric_fn, needs_proba, THRESHOLD, target_col, feature_names,
-                  show_roc=False, show_importance=False, show_shap=False, method_importance='native_importance',
-                  sensibilite=False, features_sensibilite=None, type_sensi='all', verbose=False,
-                  text_save=None, to_save=False, save_dir=None):
+def run_model_aug(model_name, 
+                  base_model, 
+                  augmentation_name, 
+                  augmentation, 
+                  X_train, 
+                  X_test, 
+                  y_train, 
+                  y_test,
+                  MAIN_METRIC_NAME, 
+                  metric_fn, 
+                  needs_proba, 
+                  THRESHOLD, 
+                  target_col, 
+                  feature_names,
+                  show_roc=False, 
+                  show_importance=False, 
+                  show_shap=False, 
+                  method_importance='native_importance',
+                  sensibilite=False, 
+                  features_sensibilite=None, 
+                  type_sensi='all', 
+                  verbose=False,
+                  text_save=None,
+                  to_save=False, 
+                  save_dir=None,
+                  calibration = False,
+                  calibration_method = "isotonic", # or "sigmoid" / "platt"
+                  show_calibration_fitness=False,
+                  ):
+
     if features_sensibilite is None:
         features_sensibilite = ["Neutropenie", "Prophylaxis_antifungal"]
     if verbose:
@@ -180,6 +206,15 @@ def run_model_aug(model_name, base_model, augmentation_name, augmentation, X_tra
     pipe_train = Pipeline(steps)
     pipe_train.fit(X_train, y_train)
     pipe_inference = Pipeline([("scaler", pipe_train.named_steps["scaler"]), ("model", pipe_train.named_steps["model"])])
+    if calibration:
+        pipe_inference = CalibratedModel(
+            predictor=pipe_inference,
+            X_calibration=X_test,
+            y_calibration=y_test,
+            method=calibration_method,   # or "sigmoid" / "platt"
+            show_calibration_fitness=show_calibration_fitness,
+        )
+    
     y_pred_proba = _predict_with_optional_proba(pipe_inference, X_test)
     if needs_proba or show_roc:
         if y_pred_proba is None:
@@ -432,7 +467,6 @@ def load_config_for_target(target_col, config_dir=None):
             config[key] = parsed
     return config, config_path
 
-
 def run_config_for_target(target_col, df_features_clean, df_labels_fusion, sensibilite=False, show_importance=False,
                           show_roc=False, show_shap=False, features_sensibilite=None, type_sensi='all',
                           method_importance='native_importance', config_dir=os.getcwd() + '\\configs\\',
@@ -451,11 +485,14 @@ def run_config_for_target(target_col, df_features_clean, df_labels_fusion, sensi
         features_sensibilite = ["Neutropenie", "Prophylaxis_antifungal"]
     if not model_name:
         raise ValueError(f"Le fichier {config_path} ne contient pas de modele.")
+    
     df_labels_1 = df_labels_fusion[target_col].to_frame()
     X_train, X_test, y_train, y_test, _ = preparer_jeu_xy(df_features_clean, df_labels_1, random_state=random_seed)
     X_test, y_test = _apply_condition_test(X_test, y_test, condition_test)
+
     if condition_test is not None:
         print(f"Filtrage du jeu de test via condition_test -> {len(X_test)} echantillons.")
+
     all_models = get_models(y_train, use_catboost=True, imbalance_threshold=0.2, random_state=random_seed)
     augmentations = get_augmentation_methods(random_state=random_seed)
     metrics = get_metric()
@@ -466,7 +503,11 @@ def run_config_for_target(target_col, df_features_clean, df_labels_fusion, sensi
                                X_train, X_test, y_train, y_test, MAIN_METRIC_NAME, metric_entry["metric_fn"],
                                metric_entry["needs_proba"], THRESHOLD, target_col, X_train.columns, show_roc,
                                show_importance, show_shap, method_importance, sensibilite, features_sensibilite,
-                               type_sensi, True, text_save, to_save, save_dir)
+                               type_sensi, True, text_save, to_save, save_dir,
+                               calibration=True,
+                               calibration_method = "isotonic", # isotonic or "sigmoid" / "platt",
+                               show_calibration_fitness= True,
+                               )
     y_pred_proba, y_pred_discrete = _compute_binary_outputs(run_output["pipe_inference"], X_test, THRESHOLD)
     run_output["metric_scores"] = _compute_metric_scores(metrics, y_test, y_pred_proba, y_pred_discrete)
     return run_output

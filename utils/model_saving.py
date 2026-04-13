@@ -26,6 +26,15 @@ def _model_path(diagnostic: str, model_dir: Optional[str | Path], create: bool) 
     return base_dir / f"{_slugify(diagnostic)}.joblib"
 
 
+def _extract_calibration_info(model: Any) -> Optional[Dict[str, Any]]:
+    if model is None or not hasattr(model, "get_calibration_info"):
+        return None
+    try:
+        return model.get_calibration_info()
+    except Exception:
+        return None
+
+
 def save_model(
     diagnostic: str,
     pipe_train: PipelineLike,
@@ -59,10 +68,17 @@ def save_model(
         "metadata": metadata or {},
         "Youden_threshold" : youden_threshold,
     }
+    calibration_info = _extract_calibration_info(payload["pipe_inference"])
+    if calibration_info is not None:
+        payload["calibration"] = calibration_info
     if  not target_path.exists() or overwrite:
-        
         joblib.dump(payload, target_path)
     return target_path
+
+
+def write_model(*args, **kwargs) -> Path:
+    """Alias historique de save_model."""
+    return save_model(*args, **kwargs)
 
 
 def load_model(
@@ -79,4 +95,6 @@ def load_model(
     payload = joblib.load(target_path)
     if "pipe_inference" not in payload:
         payload["pipe_inference"] = payload.get("pipe_train")
+    if "calibration" not in payload:
+        payload["calibration"] = _extract_calibration_info(payload.get("pipe_inference"))
     return payload
