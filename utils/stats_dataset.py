@@ -9,6 +9,148 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 from typing import Dict, Optional, Sequence, Tuple
 
 
+def descript_data(
+    df: pd.DataFrame,
+    save_path: Optional[Path] = None,
+    paper_format: bool = False,
+    decimals: int = 2,
+    non_binary_only: bool = False,
+) -> pd.DataFrame:
+    """
+    Affiche un tableau descriptif par colonne avec la médiane,
+    l'écart interquartile (Q3 - Q1) et le pourcentage de valeurs manquantes.
+
+    Args:
+        df: DataFrame à résumer.
+        save_path: chemin optionnel de sauvegarde (.csv, .xlsx ou .tex).
+        paper_format: si True, retourne un tableau prêt pour un papier avec
+            une colonne "Médiane [IQR]".
+        decimals: nombre de décimales pour l'affichage et l'export.
+        non_binary_only: si True, conserve uniquement les colonnes numériques
+            non binaires, même en présence de valeurs manquantes.
+    """
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("`df` doit être un pandas.DataFrame.")
+
+    def _format_number(value):
+        if pd.isna(value):
+            return "NA"
+        return f"{value:.{decimals}f}"
+
+    def _is_binary(series: pd.Series) -> bool:
+        unique_values = pd.unique(series.dropna())
+        return len(unique_values) <= 2
+
+    def _is_zero_one_binary(series: pd.Series) -> bool:
+        unique_values = set(pd.unique(series.dropna()))
+        return len(unique_values) > 0 and unique_values.issubset({0, 1, 0.0, 1.0})
+
+    def _inverse_time_transform(series: pd.Series) -> pd.Series:
+        numeric_series = pd.to_numeric(series, errors="coerce")
+        restored = pd.Series(np.nan, index=series.index, dtype="float64")
+        restored.loc[numeric_series == 0] = 0.0
+
+        valid_mask = numeric_series.notna() & (numeric_series != 0) & (numeric_series < 1)
+        restored.loc[valid_mask] = 1.0 / (1.0 - numeric_series.loc[valid_mask])
+        return restored
+
+    def _restore_original_scale(data: pd.DataFrame) -> pd.DataFrame:
+        restored_df = data.copy()
+
+        if "SOFA_scaled" in restored_df.columns:
+            restored_df["SOFA_scaled"] = pd.to_numeric(
+                restored_df["SOFA_scaled"], errors="coerce"
+            ) * 24
+            restored_df = restored_df.rename(columns={"SOFA_scaled": "SOFA_score"})
+
+        if "Age_scaled" in restored_df.columns:
+            restored_df["Age_scaled"] = pd.to_numeric(
+                restored_df["Age_scaled"], errors="coerce"
+            ) * 92
+            restored_df = restored_df.rename(columns={"Age_scaled": "Age"})
+
+        for col in ["Time H-ICU", "TIME SYMPTOMES-ICU", "Time  DG-ICU"]:
+            if col in restored_df.columns:
+                restored_df[col] = _inverse_time_transform(restored_df[col])
+
+        return restored_df
+
+    selected_df = df.copy()
+    if non_binary_only:
+        numeric_df = df.select_dtypes(include=[np.number])
+        kept_columns = [
+            col
+            for col in numeric_df.columns
+            if not _is_binary(numeric_df[col])
+        ]
+        selected_df = numeric_df[kept_columns]
+
+    for col in selected_df.columns:
+        series = selected_df[col]
+        if pd.api.types.is_numeric_dtype(series) and _is_binary(series):
+            selected_df[col] = series.astype("Float64")
+
+    if "Hem_mal" in selected_df.columns:
+        selected_df = selected_df.drop(columns="Hem_mal")
+    if "Leukocytes" in selected_df.columns:
+        selected_df = selected_df.drop(columns="Leukocytes")
+    if "PaO2/FiO2 VALUE VALUE" in selected_df.columns:
+
+        selected_df = selected_df.rename(columns={"PaO2/FiO2 VALUE VALUE": "PaO2/FiO2"})
+
+    selected_df = _restore_original_scale(selected_df)
+
+    numeric_df = selected_df.select_dtypes(include=[np.number])
+    medians = numeric_df.median()
+    iqr = numeric_df.quantile(0.75) - numeric_df.quantile(0.25)
+    missing_pct = selected_df.isna().mean().mul(100).reindex(selected_df.columns)
+    positive_rate = pd.Series(np.nan, index=selected_df.columns, dtype="float64")
+    for col in selected_df.columns:
+        series = selected_df[col]
+        if pd.api.types.is_numeric_dtype(series) and _is_zero_one_binary(series):
+            positive_rate.loc[col] = pd.to_numeric(series, errors="coerce").eq(1).mean() * 100
+
+    summary = pd.DataFrame({"colonne": selected_df.columns})
+    summary["mediane"] = summary["colonne"].map(medians).round(decimals)
+    summary["interquartile_ratio"] = summary["colonne"].map(iqr).round(decimals)
+    summary["pourcentage_donnees_manquantes"] = missing_pct.round(decimals).values
+    summary["positive_rate"] = summary["colonne"].map(positive_rate).round(decimals)
+
+    output_df = summary
+    if paper_format:
+        output_df = pd.DataFrame(
+            {
+                "Variable": selected_df.columns,
+                "Mediane [IQR]": [
+                    f"{_format_number(medians.get(col))} [{_format_number(iqr.get(col))}]"
+                    for col in selected_df.columns
+                ],
+                "Donnees manquantes (%)": [
+                    _format_number(missing_pct.get(col))
+                    for col in selected_df.columns
+                ],
+                "Positive rate (%)": [
+                    _format_number(positive_rate.get(col))
+                    for col in selected_df.columns
+                ],
+            }
+        )
+
+    if save_path is not None:
+        save_path = Path(save_path)
+        if save_path.suffix == ".csv":
+            output_df.to_csv(save_path, index=False)
+        elif save_path.suffix == ".xlsx":
+            output_df.to_excel(save_path, index=False)
+        elif save_path.suffix == ".tex":
+            output_df.to_latex(save_path, index=False, escape=False)
+        else:
+            raise ValueError("Extension non supportée. Utiliser .csv, .xlsx ou .tex.")
+
+    print(output_df)
+    return output_df
+
+
 def analyser_variables_binaires(df, visualisation=True, print_results=True):
     """
     Analyse un DataFrame contenant des variables binaires (0/1).
@@ -28,9 +170,9 @@ def analyser_variables_binaires(df, visualisation=True, print_results=True):
     if visualisation:
         plt.figure(figsize=(15, 8))
         plt.bar(distribution_pct.index, distribution_pct.values)
-        plt.title("Proportion de chaque diagnostic dans la BDD")
-        plt.xlabel("Nom du diagnostic")
-        plt.ylabel("Pourcentage des diagnostics (%)")
+        plt.title("Proportion of each diagnostic in the database")
+        plt.xlabel("diagnostic name")
+        plt.ylabel("Percentage of diagnostics (%)")
         plt.xticks(rotation=20, ha="right")
         plt.tight_layout()
         plt.show()

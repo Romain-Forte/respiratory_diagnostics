@@ -265,9 +265,9 @@ def plot_multilabel_network_matplotlib(
     sm = cm.ScalarMappable(cmap=cmap_obj, norm=norm)
     sm.set_array([])
     cbar = plt.colorbar(sm, ax=ax, fraction=0.035, pad=0.02)
-    cbar.set_label("Co-occurrence" + (" (%)" if normalize == "percent" else " (count)"))
+    cbar.set_label("Codiagnostics" + (" (%)" if normalize == "percent" else " (count)"))
 
-    ax.set_title("Graphe de co-occurrence des labels")
+    ax.set_title("Graph of codiagnostics")
     ax.set_axis_off()
     plt.tight_layout()
     return fig, ax
@@ -332,6 +332,7 @@ def show_roc_curve(
     highlight_label=None,
     highlight_color="crimson",
     save_path=None,
+    model_name=None,
 ):
     """
     Trace la courbe ROC et retourne la ROC AUC.
@@ -367,15 +368,20 @@ def show_roc_curve(
         fpr, tpr, thresholds = roc_curve(y_true, y_score, pos_label=pos_label)
     roc_auc = roc_auc_score(y_true, y_score)
 
+    roc_label = f"ROC curve (AUC = {roc_auc:.2f})"
+
     # Plot
     plt.figure(figsize=(6, 6))
-    plt.plot(fpr, tpr, lw=2, label=f"ROC curve (AUC = {roc_auc:.2f})")
-    plt.plot([0, 1], [0, 1], lw=1, linestyle="--")
+    plt.plot(fpr, tpr, lw=2, label=roc_label)
+    plt.plot([0, 1], [0, 1], lw=0.8, linestyle="--", color="gray", alpha=0.9)
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.05])
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
-    plt.title("ROC Curve")
+    title = "ROC Curve"
+    if model_name:
+        title = f"ROC Curve - {model_name}"
+    plt.title(title)
     plt.grid(False)
 
     # Annoter quelques points avec threshold + NPV
@@ -414,7 +420,6 @@ def show_roc_curve(
         highlight_npv = negative_predictive_value(y_true, y_pred_highlight)
 
         label_name = highlight_label or "Seuil mis en \u00e9vidence"
-        legend_label = f"{label_name} (NPV={highlight_npv:.2f})"
         plt.scatter(
             fpr[highlight_idx],
             tpr[highlight_idx],
@@ -423,19 +428,26 @@ def show_roc_curve(
             edgecolor="black",
             linewidth=1.2,
             zorder=5,
-            label=legend_label
         )
         plt.annotate(
-            legend_label,
+            label_name,
             (fpr[highlight_idx], tpr[highlight_idx]),
             textcoords="offset points",
-            xytext=(10, -15),
+            xytext=(-10, 10),
             fontsize=9,
             color=highlight_color,
+            ha="right",
+            va="bottom",
             bbox=dict(boxstyle="round,pad=0.2", fc="white", ec=highlight_color, lw=0.8)
         )
+        roc_label = (
+            f"ROC curve (AUC = {roc_auc:.2f})\n"
+            f"NPV(Youden: {highlight_thr_value:.2f}) = {highlight_npv:.2f}"
+        )
+        plt.gca().lines[0].set_label(roc_label)
 
     plt.legend(loc="lower right")
+    plt.tight_layout()
 
     if save_path:
         save_path = Path(save_path)

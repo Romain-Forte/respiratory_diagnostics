@@ -60,7 +60,8 @@ def validation_save(diagnostique,
         highlight_threshold=youden_threshold,
         highlight_label=f"Youden = {youden_threshold:.2f}",
         highlight_color="crimson",
-        save_path=str(target_save_dir / "roc_curve.png")
+        save_path=str(target_save_dir / "roc_curve.png"),
+        model_name=loaded.get("model_name")
     )
 
     y_pred_bin_roc = (y_pred_proba > youden_threshold).astype(int)

@@ -233,7 +233,8 @@ def run_model_aug(model_name,
         show_roc_curve(
             y_test, y_pred, roc_points=roc_points, highlight_threshold=youden_threshold,
             highlight_label=f"Youden = {youden_threshold:.2f}", highlight_color="crimson",
-            save_path=str(target_save_dir / "roc_curve.png") if target_save_dir is not None else None
+            save_path=str(target_save_dir / "roc_curve.png") if target_save_dir is not None else None,
+            model_name=model_name,
         )
         print("Negative Predictive Value youden:", negative_predictive_value(y_test, (y_pred > youden_threshold).astype(int)), "threshold", youden_threshold)
     if show_importance:

@@ -99,8 +99,78 @@ ETIOLOGY_MAPPING: Dict[str, set] = {
 }
 
 def contains_keywords(text, keywords):
-    text = text.lower()
+    if pd.isna(text):
+        return pd.NA
+    text = str(text).lower()
     return any(keyword in text for keyword in keywords)
+
+
+def _comparison_nullable(series: pd.Series, value: Any, op) -> pd.Series:
+    result = pd.Series(pd.NA, index=series.index, dtype="boolean")
+    mask = series.notna()
+    if mask.any():
+        result.loc[mask] = op(series.loc[mask], value)
+    return result
+
+
+def _eq_nullable(series: pd.Series, value: Any) -> pd.Series:
+    return _comparison_nullable(series, value, lambda s, v: s == v)
+
+
+def _ge_nullable(series: pd.Series, value: Any) -> pd.Series:
+    return _comparison_nullable(series, value, lambda s, v: s >= v)
+
+
+def _gt_nullable(series: pd.Series, value: Any) -> pd.Series:
+    return _comparison_nullable(series, value, lambda s, v: s > v)
+
+
+def _lt_nullable(series: pd.Series, value: Any) -> pd.Series:
+    return _comparison_nullable(series, value, lambda s, v: s < v)
+
+
+def _nullable_or(*series_list: pd.Series) -> pd.Series:
+    result = series_list[0].astype("boolean")
+    for series in series_list[1:]:
+        result = result | series.astype("boolean")
+    return result
+
+
+def _nullable_and(*series_list: pd.Series) -> pd.Series:
+    result = series_list[0].astype("boolean")
+    for series in series_list[1:]:
+        result = result & series.astype("boolean")
+    return result
+
+
+def _bool_to_float(series: pd.Series) -> pd.Series:
+    series = series.astype("boolean")
+    result = pd.Series(pd.NA, index=series.index, dtype="Float64")
+    mask = series.notna()
+    if mask.any():
+        result.loc[mask] = series.loc[mask].map({True: 1.0, False: 0.0}).to_numpy()
+    return result
+
+
+def _str_contains_nullable(series: pd.Series, pattern: str) -> pd.Series:
+    result = pd.Series(pd.NA, index=series.index, dtype="boolean")
+    mask = series.notna()
+    if mask.any():
+        result.loc[mask] = series.loc[mask].astype(str).str.contains(pattern, case=False, na=False)
+    return result
+
+
+def _coerce_numeric_frame(df: pd.DataFrame, columns) -> pd.DataFrame:
+    coerced = df.copy()
+    for col in columns:
+        if col in coerced.columns:
+            coerced[col] = pd.to_numeric(coerced[col], errors="coerce")
+    return coerced
+
+
+def _rowwise_max_numeric(df: pd.DataFrame, columns) -> pd.Series:
+    numeric_subset = _coerce_numeric_frame(df[columns], columns)
+    return numeric_subset.max(axis=1)
 
 def transform_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -110,10 +180,11 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
     "Time  DG-ICU"]
     for col in cols_time:
         if col in df.columns:
+            time_values = pd.to_numeric(df[col], errors="coerce")
             df[col] = np.where(
-                    df[col] == 0,
-                    0,
-                    1 - 1 / df[col]
+                    time_values == 0,
+                    0.0,
+                    1 - 1 / time_values
                 )
     #Clip GvHD 
     if "GvHD" in df.columns:
@@ -127,7 +198,7 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
         df = df.drop(columns=["Age"])
         # df["Age_scaled_sq"] = age_scaled ** 2
     if "Charlson_index" in df.columns:
-        df[df["Charlson_index"]> 22]  = 22
+        df["Charlson_index"] = pd.to_numeric(df["Charlson_index"], errors="coerce").clip(upper=22)
 
     if "Location_before_ICU" in df.columns:
         # Mapping numérique → catégorie textuelle
@@ -170,9 +241,14 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
 
         # }
         # df = apply_mapping(df, "Dis_status HEM", mapping)
-        df["Disease_status_inaugural"] = (df["Dis_status HEM"] == 1) | (df["Dis_status HEM"] == 2)
-        df["Disease_status_remission"] = (df["Dis_status HEM"] == 4) 
-        df["Disease_status_evolutive"] = (df["Dis_status HEM"] == 3) | (df["Dis_status HEM"] >= 5)
+        dis_status = pd.to_numeric(df["Dis_status HEM"], errors="coerce")
+        df["Disease_status_inaugural"] = _bool_to_float(
+            _nullable_or(_eq_nullable(dis_status, 1), _eq_nullable(dis_status, 2))
+        )
+        df["Disease_status_remission"] = _bool_to_float(_eq_nullable(dis_status, 4))
+        df["Disease_status_evolutive"] = _bool_to_float(
+            _nullable_or(_eq_nullable(dis_status, 3), _ge_nullable(dis_status, 5))
+        )
         df = df.drop(columns = ["Dis_status HEM"])
         
     if "Alveolar_xray" in df.columns:
@@ -220,8 +296,7 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
     "Nodules"]
 
     if  all(c in df.columns for c in cols_nodules):
-
-        df["Nodules_any"] = df[cols_nodules].max(axis=1)
+        df["Nodules_any"] = _rowwise_max_numeric(df, cols_nodules)
         df = df.drop(columns=cols_nodules)
 
     cols_opacity = [
@@ -232,11 +307,11 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
     'Interst_xray_Diffuse']
 
     if  all(c in df.columns for c in cols_opacity):
-
-        df["GGO"] = df[cols_opacity].max(axis=1)
+        df["GGO"] = _rowwise_max_numeric(df, cols_opacity)
         df = df.drop(columns=cols_opacity)
     
-    df["Quad_no"] = df["Quad_no"].clip(upper=4.0)
+    if "Quad_no" in df.columns:
+        df["Quad_no"] = pd.to_numeric(df["Quad_no"], errors="coerce").clip(upper=4.0)
     # SOFA
     if "SOFA_score" in df.columns:
         sofa = pd.to_numeric(df["SOFA_score"], errors="coerce")
@@ -247,7 +322,7 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # Resp rate severity
     if "SpO2" in df.columns:
-       df["SaO2"] = sao2_hill(df["SpO2"])
+       df["SaO2"] = sao2_hill(pd.to_numeric(df["SpO2"], errors="coerce"))
        df = df.drop(columns=["SpO2"])
 
     if "Resp_rate" in df.columns:
@@ -261,7 +336,11 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
         df = _temp_to_cat(df, "Temp")
 
     if "Hem_mal_AML" in df.columns and "Leukocytes" in df.columns:
-        df["Leukostase"] = (df["Hem_mal_AML"] == 1) & (df["Leukocytes"] > 50)
+        hem_mal_aml = pd.to_numeric(df["Hem_mal_AML"], errors="coerce")
+        leukocytes = pd.to_numeric(df["Leukocytes"], errors="coerce")
+        df["Leukostase"] = _bool_to_float(
+            _nullable_and(_eq_nullable(hem_mal_aml, 1), _gt_nullable(leukocytes, 50))
+        )
 
     
     # Neutrophils: clean to numeric and category
@@ -271,7 +350,9 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
         val = pd.to_numeric(s.str.replace(",", ".", regex=False), errors="coerce")
         s_leuko = df["Leukocytes"].astype(str).str.extract(r"([+-]?\d+(?:[.,]\d+)?)", expand=False)
         val_leuko = pd.to_numeric(s_leuko.str.replace(",", ".", regex=False), errors="coerce")
-        df["Neutropenie"] = (val < 0.5) | (val_leuko < 1)
+        df["Neutropenie"] = _bool_to_float(
+            _nullable_or(_lt_nullable(val, 0.5), _lt_nullable(val_leuko, 1))
+        )
         
         df = df.drop(columns=["Leukocytes","Neutrophils"])
         # Ancienne méthode - catégoriser
@@ -283,19 +364,35 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # merging of same_signification columns 
     if "Vasopressors" in df.columns and "Septic_shock" in df.columns:
-        df["Hypotension"] = (df["Septic_shock"] == 1) | (df["Vasopressors"] == 1)
+        septic_shock = pd.to_numeric(df["Septic_shock"], errors="coerce")
+        vasopressors = pd.to_numeric(df["Vasopressors"], errors="coerce")
+        df["Hypotension"] = _bool_to_float(
+            _nullable_or(_eq_nullable(septic_shock, 1), _eq_nullable(vasopressors, 1))
+        )
         df = df.drop(columns=["Septic_shock","Vasopressors"])
         
     if "Drug_induced" in df.columns and "Immuno_drugs" in df.columns:
-        df["Immuno_drugs"] = (df["Drug_induced"] >= 1) | (df["Immuno_drugs"] >= 1)
+        drug_induced = pd.to_numeric(df["Drug_induced"], errors="coerce")
+        immuno_drugs = pd.to_numeric(df["Immuno_drugs"], errors="coerce")
+        df["Immuno_drugs"] = _bool_to_float(
+            _nullable_or(_ge_nullable(drug_induced, 1), _ge_nullable(immuno_drugs, 1))
+        )
         df = df.drop(columns=["Drug_induced"])
 
     if "CT_Pleural_eff" in df.columns and "Pleural_eff" in df.columns:
-        df["Pleural_eff"] = (df["Pleural_eff"] == 1) | (df["CT_Pleural_eff"] == 1)
+        pleural_eff = pd.to_numeric(df["Pleural_eff"], errors="coerce")
+        ct_pleural_eff = pd.to_numeric(df["CT_Pleural_eff"], errors="coerce")
+        df["Pleural_eff"] = _bool_to_float(
+            _nullable_or(_eq_nullable(pleural_eff, 1), _eq_nullable(ct_pleural_eff, 1))
+        )
         df = df.drop(columns=["CT_Pleural_eff"])
 
     if "CT_Excavation" in df.columns and "Excavation" in df.columns:
-        df["Excavation"] = (df["CT_Excavation"] == 1) | (df["Excavation"] == 1)
+        ct_excavation = pd.to_numeric(df["CT_Excavation"], errors="coerce")
+        excavation = pd.to_numeric(df["Excavation"], errors="coerce")
+        df["Excavation"] = _bool_to_float(
+            _nullable_or(_eq_nullable(ct_excavation, 1), _eq_nullable(excavation, 1))
+        )
         df = df.drop(columns=["CT_Excavation"])
     cols_alveolar = [
         "Alveolar_cons_Focal",
@@ -304,8 +401,7 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
         'Alveolar_xray_Diffuse']
 
     if  all(c in df.columns for c in cols_alveolar):
-
-        df["Alveolar"] = df[cols_alveolar].max(axis=1)
+        df["Alveolar"] = _rowwise_max_numeric(df, cols_alveolar)
         df = df.drop(columns=cols_alveolar)
 
     col_proph_anti_fongique = [
@@ -313,7 +409,7 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
         "HSCT_BMT_Allograft"
     ]
     if all(c in df.columns for c in col_proph_anti_fongique):
-        df["Indication_prophy_anti_fun"] = df[col_proph_anti_fongique].max(axis=1)
+        df["Indication_prophy_anti_fun"] = _rowwise_max_numeric(df, col_proph_anti_fongique)
         # df["Indication_prophy_fungal_taken"] = (
         #                                     (df["Indication_prophy_anti_fun"] == 1) &
         #                                     (df["Prophylaxis_antifungal"] == 1)
@@ -343,24 +439,25 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
             "artitisreumatoide",
             "good pasture syndrome"
         ]
-        df["has_target_disease"] = df["Sys_dis_spec"].apply(
-                        lambda x: contains_keywords(x, diseases)
-                    )
+        target_disease = df["Sys_dis_spec"].apply(lambda x: contains_keywords(x, diseases))
+        df["has_target_disease"] = _bool_to_float(pd.Series(target_disease, index=df.index, dtype="boolean"))
         df = df.drop(columns = ["Sys_dis_spec"])
     if all(c in df.columns for c in col_indic_pneumocystose):
-        df["Indication_prophy_pneumocystose"] = df[col_indic_pneumocystose].max(axis=1)
+        df["Indication_prophy_pneumocystose"] = _rowwise_max_numeric(df, col_indic_pneumocystose)
         if "has_target_disease" in df.columns:
-            df["Indication_prophy_pneumocystose"] = df[["Indication_prophy_pneumocystose",
-                                                        "has_target_disease"]].max(axis=1)
+            df["Indication_prophy_pneumocystose"] = _rowwise_max_numeric(
+                df,
+                ["Indication_prophy_pneumocystose", "has_target_disease"],
+            )
             df = df.drop(columns = ["has_target_disease"])
-        df["Indication_prophy_pneumocystose_taken"] = (
-                                            (df["Indication_prophy_pneumocystose"] == 1) &
-                                            (df["Prophylaxis_pneumocystis"] == 1)
-                                        )
-        df["Indication_prophy_pneumocystose_not_taken"] = (
-                                            (df["Indication_prophy_pneumocystose"] == 1) &
-                                            (df["Prophylaxis_pneumocystis"] == 0)
-                                        )
+        indication_pneumo = pd.to_numeric(df["Indication_prophy_pneumocystose"], errors="coerce")
+        prophylaxis_pneumo = pd.to_numeric(df["Prophylaxis_pneumocystis"], errors="coerce")
+        df["Indication_prophy_pneumocystose_taken"] = _bool_to_float(
+            _nullable_and(_eq_nullable(indication_pneumo, 1), _eq_nullable(prophylaxis_pneumo, 1))
+        )
+        df["Indication_prophy_pneumocystose_not_taken"] = _bool_to_float(
+            _nullable_and(_eq_nullable(indication_pneumo, 1), _eq_nullable(prophylaxis_pneumo, 0))
+        )
         df = df.drop(columns = ["Indication_prophy_pneumocystose","Prophylaxis_pneumocystis"])
         
     bacterial_columns = ["BACTERIAL", "DG1","DG2"]
@@ -371,17 +468,18 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
     # Donc pour faire l'analyse sur les pneumonie microbiologiquement documentée, 
     # il faut prendre les bacteria == 2 +les legionelles de la colonne dg1ou dg2.
     if all(c in df.columns for c in bacterial_columns):
-            dg1 = df["DG1"].fillna("").astype(str)
-            dg2 = df["DG2"].fillna("").astype(str)
-
-            df["Pneumonia_microbio"] = (
-                                        (df["BACTERIAL"] == 2.0) |
-                                        ((dg1.str.contains("legionella", case=False, na=False)) |
-                                        (dg2.str.contains("legionella", case=False, na=False)))
-                                    )
-            df["Pneumonia_clinic"] = ((df["BACTERIAL"] == 1.0) &
-                                                (~df["Pneumonia_microbio"])
-                                            )
+            bacterial = pd.to_numeric(df["BACTERIAL"], errors="coerce")
+            legionella_dg1 = _str_contains_nullable(df["DG1"], "legionella")
+            legionella_dg2 = _str_contains_nullable(df["DG2"], "legionella")
+            pneumonia_microbio = _nullable_or(
+                _eq_nullable(bacterial, 2.0),
+                legionella_dg1,
+                legionella_dg2,
+            )
+            df["Pneumonia_microbio"] = _bool_to_float(pneumonia_microbio)
+            df["Pneumonia_clinic"] = _bool_to_float(
+                _nullable_and(_eq_nullable(bacterial, 1.0), ~pneumonia_microbio)
+            )
 
             df = df.drop(columns = bacterial_columns)
     return df
@@ -408,14 +506,24 @@ def apply_mapping(df: pd.DataFrame, col: str, mapping: dict, prefix: str = "") -
     if prefix == "":
         prefix = col
 
+    source_values = pd.to_numeric(df[col], errors="coerce")
+
     # 1️⃣  Créer la colonne catégorielle textuelle
-    df[f"{prefix}_cat"] = df[col].map(mapping)
+    df[f"{prefix}_cat"] = source_values.map(mapping)
+
+    source_na = source_values.isna()
 
     # 2️⃣  Créer les colonnes binaires pour chaque catégorie
     for label in mapping.values():
         safe_label = str(label).replace(" ", "_")
         new_col = f"{prefix}_{safe_label}"
-        df[new_col] = (df[f"{prefix}_cat"] == label).astype(int)
+        encoded = pd.Series(pd.NA, index=df.index, dtype="Float64")
+        valid_rows = ~source_na
+        if valid_rows.any():
+            encoded.loc[valid_rows] = (
+                df.loc[valid_rows, f"{prefix}_cat"] == label
+            ).astype(float).to_numpy()
+        df[new_col] = encoded
     df = df.drop(columns=[col,f"{prefix}_cat"])
     return df
 
@@ -445,8 +553,9 @@ def _scale_minmax(series: pd.Series) -> Tuple[pd.Series, float, float]:
 
     # 4) Cas dégénéré (vmax == vmin ou bornes non finies)
     if not np.isfinite(vmax - vmin) or vmax == vmin:
-        zeros = np.zeros(x_np.shape, dtype=np.float64)
-        return pd.Series(zeros, index=series.index, dtype="float64"), vmin, vmax
+        zeros = pd.Series(np.zeros(x_np.shape, dtype=np.float64), index=series.index, dtype="float64")
+        zeros.loc[x_num.isna()] = np.nan
+        return zeros, vmin, vmax
 
     # 5) Scaling
     xs_np = (x_np - vmin) / (vmax - vmin)
@@ -464,7 +573,7 @@ def _temp_to_cat(
     drop_first: bool = False
 ) -> pd.DataFrame:
     """
-    - Convertit df[col] en float (NaN -> moyenne).
+    - Convertit df[col] en float.
     - Crée une colonne numérique df[f"{col}_gravité"] (score de gravité entre 0 et 1).
 
     Scores :
@@ -477,10 +586,6 @@ def _temp_to_cat(
     df = df.copy()
     df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # ➤ Remplacer les NaN par la moyenne
-    moyenne = df[col].mean()
-    df[col] = df[col].fillna(moyenne)
-
     # ➤ Binning en catégories
     bins = [0, 36, 37.5, 39, 100]
     scores = [0.2, 0.0, 0.6, 1.0]  # scores correspondants à chaque intervalle
@@ -489,7 +594,11 @@ def _temp_to_cat(
     cat = pd.cut(df[col], bins=bins, labels=False, right=False)
 
     # Attribution des scores correspondants
-    df[f"{col}_gravité"] = cat.map(lambda x: scores[x] if pd.notna(x) else None)
+    severity = pd.Series(pd.NA, index=df.index, dtype="Float64")
+    mask = cat.notna()
+    if mask.any():
+        severity.loc[mask] = cat.loc[mask].map(lambda x: float(scores[int(x)])).to_numpy()
+    df[f"{col}_gravité"] = severity
 
     # ➤ Supprimer la colonne d'origine
     df = df.drop(columns=[col])
@@ -506,8 +615,9 @@ def _resp_severity(df: pd.DataFrame) -> pd.Series:
       - Sinon, catégoriser par RR seul: <12 -> 2, 12-20 -> 0, 21-29 -> 1, >=30 -> 2
     """
     rr = pd.to_numeric(df.get("Resp_rate", pd.Series(index=df.index, dtype=float)), errors="coerce")
-    sev = pd.Series(0.0, index=df.index)
-    sev[(rr >= 30) ] = 1
+    sev = pd.Series(pd.NA, index=df.index, dtype="Float64")
+    sev.loc[rr.notna()] = 0.0
+    sev.loc[rr >= 30] = 1.0
     df = df.drop(columns=["Resp_rate"])
     return sev
 
