@@ -127,37 +127,6 @@ def _apply_condition_test(X_test, y_test, condition_test):
 
 
 # ---------------------------------------------------------------------------
-# Export helpers
-# ---------------------------------------------------------------------------
-
-def _export_model_bars(scores_dict, title, output_path):
-    model_names = list(scores_dict.keys())
-    means, stds = [], []
-    for value in scores_dict.values():
-        mean, std = value, 0.0
-        if isinstance(value, dict):
-            mean = value.get("mean", value.get("avg_score", 0.0))
-            std = value.get("std", value.get("std_score", 0.0))
-        elif isinstance(value, (list, tuple)) and len(value) >= 2:
-            mean, std = value[0], value[1]
-        means.append(float(mean))
-        stds.append(abs(float(std)))
-    has_errors = any(std > 0 for std in stds)
-    plt.figure(figsize=(8, 6))
-    bars = plt.bar(model_names, means, yerr=stds if has_errors else None, capsize=5 if has_errors else None)
-    plt.title(title)
-    plt.xlabel("Modeles")
-    plt.ylabel("Score")
-    plt.xticks(rotation=45)
-    for idx, bar in enumerate(bars):
-        label = f"{bar.get_height():.3f}" if stds[idx] == 0 else f"{bar.get_height():.3f} +/- {stds[idx]:.3f}"
-        plt.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), label, ha="center", va="bottom")
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=180)
-    plt.close()
-
-
-# ---------------------------------------------------------------------------
 # Single-run evaluation
 # ---------------------------------------------------------------------------
 
@@ -327,7 +296,12 @@ def _find_best_combo_from_splits(split_iterable, total_runs, MODEL_NAMES, MAIN_M
         print("Negative Predictive Value (best combo, seuil Youden {:.3f}): {}".format(best_threshold, negative_predictive_value(best_result["y_test"], (best_result["y_pred"] > best_threshold).astype(int))))
     if model_best_entries:
         labelled_scores = {f"{model} ({model_best_aug[model]})": (data["avg_score"], data["std_score"]) for model, data in model_best_entries.items()}
-        plot_model_bars(labelled_scores, title=f"Meilleure augmentation par modele - {target_col}")
+        score_bar_path = target_save_dir / "scores_bar.png" if to_save and target_save_dir is not None else None
+        plot_model_bars(
+            labelled_scores,
+            title=f"Best augmentation by model - {target_col}",
+            save_path=score_bar_path,
+        )
         if to_save and target_save_dir is not None:
             score_records = []
             for model_name, data in model_best_entries.items():
@@ -343,7 +317,6 @@ def _find_best_combo_from_splits(split_iterable, total_runs, MODEL_NAMES, MAIN_M
                     writer.writerows(score_records)
                 with (target_save_dir / "scores_summary.json").open("w", encoding="utf-8") as handle:
                     json.dump(score_records, handle, indent=2)
-                _export_model_bars(labelled_scores, title=f"Meilleure augmentation par modele - {target_col}", output_path=target_save_dir / "scores_bar.png")
         print("\nCourbes ROC des meilleures augmentations par modele :")
         for model_name, data in model_best_entries.items():
             youden_threshold, roc_points = _compute_youden_threshold(data["entry"]["y_test"], data["entry"]["result"]["y_pred"])

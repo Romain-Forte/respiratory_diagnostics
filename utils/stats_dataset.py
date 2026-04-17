@@ -18,13 +18,13 @@ def descript_data(
 ) -> pd.DataFrame:
     """
     Affiche un tableau descriptif par colonne avec la médiane,
-    l'écart interquartile (Q3 - Q1) et le pourcentage de valeurs manquantes.
+    Q1, Q3, le pourcentage de valeurs manquantes et les effectifs.
 
     Args:
         df: DataFrame à résumer.
         save_path: chemin optionnel de sauvegarde (.csv, .xlsx ou .tex).
         paper_format: si True, retourne un tableau prêt pour un papier avec
-            une colonne "Médiane [IQR]".
+            une colonne "Mediane [Q1-Q3]".
         decimals: nombre de décimales pour l'affichage et l'export.
         non_binary_only: si True, conserve uniquement les colonnes numériques
             non binaires, même en présence de valeurs manquantes.
@@ -102,27 +102,43 @@ def descript_data(
 
     numeric_df = selected_df.select_dtypes(include=[np.number])
     medians = numeric_df.median()
-    iqr = numeric_df.quantile(0.75) - numeric_df.quantile(0.25)
+    q1 = numeric_df.quantile(0.25)
+    q3 = numeric_df.quantile(0.75)
     missing_pct = selected_df.isna().mean().mul(100).reindex(selected_df.columns)
+    non_missing_count = selected_df.notna().sum().reindex(selected_df.columns)
+    total_patients = len(selected_df)
     positive_rate = pd.Series(np.nan, index=selected_df.columns, dtype="float64")
+    positive_count = pd.Series(np.nan, index=selected_df.columns, dtype="float64")
     for col in selected_df.columns:
         series = selected_df[col]
         if pd.api.types.is_numeric_dtype(series) and _is_zero_one_binary(series):
-            positive_rate.loc[col] = pd.to_numeric(series, errors="coerce").eq(1).mean() * 100
+            numeric_series = pd.to_numeric(series, errors="coerce")
+            positive_rate.loc[col] = numeric_series.eq(1).mean() * 100
+            positive_count.loc[col] = numeric_series.eq(1).sum()
 
     summary = pd.DataFrame({"colonne": selected_df.columns})
+    summary["nombre_patients"] = total_patients
+    summary["effectif_sans_nan"] = non_missing_count.values
     summary["mediane"] = summary["colonne"].map(medians).round(decimals)
-    summary["interquartile_ratio"] = summary["colonne"].map(iqr).round(decimals)
+    summary["q1"] = summary["colonne"].map(q1).round(decimals)
+    summary["q3"] = summary["colonne"].map(q3).round(decimals)
     summary["pourcentage_donnees_manquantes"] = missing_pct.round(decimals).values
+    summary["effectif_positif"] = summary["colonne"].map(positive_count).round(decimals)
     summary["positive_rate"] = summary["colonne"].map(positive_rate).round(decimals)
-
+    
     output_df = summary
     if paper_format:
         output_df = pd.DataFrame(
             {
                 "Variable": selected_df.columns,
-                "Mediane [IQR]": [
-                    f"{_format_number(medians.get(col))} [{_format_number(iqr.get(col))}]"
+                "N": [total_patients for _ in selected_df.columns],
+                # "Effectif sans NA": [
+                #     int(non_missing_count.get(col, 0))
+                #     for col in selected_df.columns
+                # ],
+                "Mediane [Q1-Q3]": [
+                    f"{_format_number(medians.get(col))} "
+                    f"[{_format_number(q1.get(col))}-{_format_number(q3.get(col))}]"
                     for col in selected_df.columns
                 ],
                 "Donnees manquantes (%)": [
@@ -133,9 +149,13 @@ def descript_data(
                     _format_number(positive_rate.get(col))
                     for col in selected_df.columns
                 ],
+                "Effectif positif": [
+                    _format_number(positive_count.get(col))
+                    for col in selected_df.columns
+                ],
             }
         )
-
+        output_df = output_df.sort_values(by = 'Variable')
     if save_path is not None:
         save_path = Path(save_path)
         if save_path.suffix == ".csv":

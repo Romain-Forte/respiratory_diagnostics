@@ -310,6 +310,7 @@ def format_to_efraim(df: pd.DataFrame, mapping_df: pd.DataFrame) -> pd.DataFrame
     df_exit['Disease-related infiltrates'] = (df[L_col_diag]  == 7).any(axis=1)
     df_exit['Drug toxicity related'] = (df[L_col_diag]  == 10).any(axis=1)
     df_exit['Other infection'] = (df[L_col_diag]  == 11).any(axis=1)
+    # df_exit['Undetermined cause'] = (df[L_col_diag]  == 12).any(axis=1)
     df_exit['Other non infectious causes'] = (df[L_col_diag]  == 13).any(axis=1) | (df[L_col_diag]  == 15).any(axis=1) | (df[L_col_diag]  == 16).any(axis=1)
 
     # 5) None values

@@ -1,3 +1,4 @@
+import json
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -11,8 +12,8 @@ from pathlib import Path
 
 def plot_model_bars(scores_dict, title, save_path=None):
     """
-    Bar plot des scores par modèle. Les valeurs peuvent être :
-        - un float : moyenne sans écart-type
+    Bar plot des scores par modele. Les valeurs peuvent etre :
+        - un float : moyenne sans ecart-type
         - un tuple/list (mean, std)
         - un dict {"mean": m, "std": s}
     """
@@ -34,25 +35,29 @@ def plot_model_bars(scores_dict, title, save_path=None):
 
     has_errors = any(std > 0 for std in stds)
 
-    plt.figure(figsize=(8, 6))
+    plt.figure(figsize=(10, 8))
     bars = plt.bar(
         model_names,
         means,
         yerr=stds if has_errors else None,
-        capsize=5 if has_errors else None
+        capsize=5 if has_errors else None,
     )
     plt.title(title)
-    plt.xlabel("Modèles")
+    plt.xlabel("Modeles")
     plt.ylabel("Score")
 
     plt.xticks(rotation=45)
     for idx, bar in enumerate(bars):
         height = bar.get_height()
-        if stds[idx] > 0:
-            label = f"{height:.3f} ± {stds[idx]:.3f}"
-        else:
-            label = f"{height:.3f}"
-        plt.text(bar.get_x() + bar.get_width()/2, height, label, ha="center", va="bottom")
+        y_text = height + stds[idx] if stds[idx] > 0 else height
+        label = f"{height:.3f} +/- {stds[idx]:.3f}" if stds[idx] > 0 else f"{height:.3f}"
+        plt.text(
+            bar.get_x() + bar.get_width() / 2,
+            y_text + 0.01,
+            label,
+            ha="center",
+            va="bottom",
+        )
 
     plt.tight_layout()
     if save_path:
@@ -60,6 +65,57 @@ def plot_model_bars(scores_dict, title, save_path=None):
         save_path.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(save_path, bbox_inches="tight")
     plt.show()
+
+
+def plot_bars_from_save(save_path, title=None, export_path=None):
+    """
+    Recharge une sauvegarde tabulaire de scores et affiche le barplot associé.
+
+    Formats supportes :
+        - `scores_summary.json`
+        - `scores_summary.csv`
+
+    Le fichier doit contenir au minimum les colonnes/champs :
+        - `model_name`
+        - `augmentation_name`
+        - `avg_score`
+        - `std_score`
+    """
+    save_path = Path(save_path)
+    if not save_path.exists():
+        raise FileNotFoundError(f"Fichier introuvable : {save_path}")
+
+    if save_path.suffix.lower() == ".json":
+        with save_path.open("r", encoding="utf-8") as handle:
+            records = json.load(handle)
+    elif save_path.suffix.lower() == ".csv":
+        records = pd.read_csv(save_path).to_dict(orient="records")
+    else:
+        raise ValueError("Format non supporte. Utiliser un fichier .json ou .csv.")
+
+    if not records:
+        raise ValueError("Le fichier de sauvegarde est vide.")
+
+    required_fields = {"model_name", "augmentation_name", "avg_score", "std_score"}
+    missing_fields = required_fields - set(records[0].keys())
+    if missing_fields:
+        raise ValueError(
+            f"Champs manquants dans la sauvegarde : {sorted(missing_fields)}"
+        )
+
+    scores_dict = {}
+    for record in records:
+        label = f"{record['model_name']} ({record['augmentation_name']})"
+        scores_dict[label] = (
+            float(record["avg_score"]),
+            float(record["std_score"]),
+        )
+
+    if title is None:
+        target = records[0].get("target")
+        title = f"Meilleure augmentation par modele - {target}" if target else "Scores des modeles"
+
+    plot_model_bars(scores_dict, title=title, save_path=export_path)
 
 def plot_multilabel_cooccurrence(
     df_labels: pd.DataFrame,

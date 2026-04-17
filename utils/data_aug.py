@@ -17,7 +17,7 @@ from imblearn.combine import (
 def get_augmentation_methods(random_state=0):
 
     methods = {
-        "No Augmentation": None,
+        "": None,
 
         # Oversampling simple
         "RandomOverSampler": RandomOverSampler(random_state=random_state),
