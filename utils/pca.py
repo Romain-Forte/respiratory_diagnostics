@@ -12,7 +12,7 @@ from matplotlib.lines import Line2D
 from sklearn.decomposition import PCA as SklearnPCA
 from sklearn.preprocessing import StandardScaler
 
-__all__ = ["PCA"]
+__all__ = ["PCA", "pca_from_dataframe"]
 
 
 def _validate_dataframe(name: str, value: Any) -> pd.DataFrame:
@@ -114,6 +114,106 @@ def _get_vivid_colors(n_colors: int) -> list[Any]:
 
     cmap = plt.get_cmap("nipy_spectral")
     return [cmap(i) for i in np.linspace(0.05, 0.95, n_colors)]
+
+
+def _normalize_color_columns(color_columns: list[str] | tuple[str, ...] | pd.Index) -> list[str]:
+    if isinstance(color_columns, pd.Index):
+        normalized = color_columns.tolist()
+    elif isinstance(color_columns, tuple):
+        normalized = list(color_columns)
+    elif isinstance(color_columns, list):
+        normalized = color_columns.copy()
+    else:
+        raise ValueError("`color_columns` doit etre une liste de noms de colonnes.")
+
+    if not normalized:
+        raise ValueError("`color_columns` ne doit pas etre vide.")
+    if not all(isinstance(column, str) and column for column in normalized):
+        raise ValueError("`color_columns` doit contenir uniquement des noms de colonnes non vides.")
+    if len(set(normalized)) != len(normalized):
+        raise ValueError("`color_columns` ne doit pas contenir de doublons.")
+    return normalized
+
+
+def _validate_binary_label_columns(df: pd.DataFrame, color_columns: list[str]) -> pd.DataFrame:
+    missing_columns = [column for column in color_columns if column not in df.columns]
+    if missing_columns:
+        raise ValueError(
+            f"Colonnes de couleur introuvables dans `df`: {', '.join(missing_columns)}."
+        )
+
+    labels_df = df.loc[:, color_columns].copy()
+    invalid_columns: list[str] = []
+
+    for column in color_columns:
+        series = labels_df[column]
+        non_null = series.dropna()
+        if non_null.empty:
+            invalid_columns.append(column)
+            continue
+
+        numeric_series = pd.to_numeric(non_null, errors="coerce")
+        if numeric_series.isna().any():
+            invalid_columns.append(column)
+            continue
+
+        unique_values = set(numeric_series.unique().tolist())
+        if not unique_values.issubset({0, 1}):
+            invalid_columns.append(column)
+            continue
+
+        labels_df[column] = pd.to_numeric(labels_df[column], errors="coerce")
+
+    if invalid_columns:
+        raise ValueError(
+            "Les colonnes de couleur doivent etre binaires/boolennes (valeurs 0/1 ou True/False): "
+            + ", ".join(invalid_columns)
+            + "."
+        )
+
+    return labels_df
+
+
+def pca_from_dataframe(
+    df: pd.DataFrame,
+    color_columns: list[str],
+    *,
+    render_mode: str = "density",
+    to_save: bool = False,
+    save_dir: str | Path | None = None,
+    show_ellipse: bool = False,
+    max_points_per_label: int = 10,
+    sigma: float = 1.0,
+    random_state: int = 0,
+) -> dict[str, Any]:
+    """
+    Lance la PCA a partir d'un DataFrame unique.
+
+    Les colonnes choisies pour la coloration sont interpretees comme labels binaires
+    et sont exclues du calcul des composantes principales.
+    """
+    df_validated = _validate_dataframe("df", df)
+    normalized_color_columns = _normalize_color_columns(color_columns)
+    labels_df = _validate_binary_label_columns(df_validated, normalized_color_columns)
+    features_df = df_validated.drop(columns=normalized_color_columns)
+
+    numeric_features = features_df.select_dtypes(include=[np.number])
+    if numeric_features.shape[1] < 2:
+        raise ValueError(
+            "Il faut au moins deux colonnes numeriques hors colonnes de couleur pour calculer la PCA."
+        )
+
+    return PCA(
+        labels=labels_df,
+        features=features_df,
+        to_save=to_save,
+        save_dir=save_dir,
+        render_mode=render_mode,
+        max_points_per_label=max_points_per_label,
+        show_ellipse=show_ellipse,
+        sigma=sigma,
+        random_state=random_state,
+    )
 
 
 def PCA(

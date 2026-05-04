@@ -67,7 +67,19 @@
     "ETATSORTIEHOSP",
     "ESORTREA",
     "DATEDECES",
-    "DSORTREA"
+    "DSORTREA",
+    "DATSORTIEHOSP",
+    "DATADMHOSPI",
+    "DATADMREA"
+
+  ],
+  "oxygene" : 
+  [
+    "REAVNI",
+    "optiflow",
+    "REAVI",
+    "REAEER",
+    "REAAMIN"
 
   ]
 }

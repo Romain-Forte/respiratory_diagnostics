@@ -78,7 +78,19 @@
   [
     "icu death",
     "hospital death",
-  	"D90 DEATH"
+  	"D90 DEATH",
+    "ICU LOS",
+    "HOSPITAL   LOS"
+
+
+  ],
+  "oxygene" : 
+  [
+    "",
+    "",
+    "",
+    "Vasopressors",
+    ""
 
   ],
   "diagnostic_feature_sets": {
