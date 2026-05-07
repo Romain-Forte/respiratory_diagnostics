@@ -1,6 +1,6 @@
 diagnosis: "Pneumocystis jirovecii infection"
 model: "Random Forest"
-augmentation: "No Augmentation"
+augmentation: ""
 main_metric: "roc_auc"
 score: 0.7117099151545179
 threshold: 0.08

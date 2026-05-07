@@ -19,6 +19,31 @@ def _as_binary_array(y: Any) -> np.ndarray:
     return y_array.astype(int)
 
 
+def _compute_calibration_slope_intercept(
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    eps: float,
+) -> tuple[float, float]:
+    y_true_array = _as_binary_array(y_true)
+    unique_classes = np.unique(y_true_array)
+    if unique_classes.size < 2:
+        return np.nan, np.nan
+
+    clipped_prob = np.clip(np.asarray(y_prob).reshape(-1), eps, 1.0 - eps)
+    logit_prob = np.log(clipped_prob / (1.0 - clipped_prob)).reshape(-1, 1)
+
+    calibration_model = LogisticRegression(
+        solver="lbfgs",
+        penalty=None,
+        max_iter=1000,
+    )
+    calibration_model.fit(logit_prob, y_true_array)
+
+    intercept = float(np.asarray(calibration_model.intercept_).reshape(-1)[0])
+    slope = float(np.asarray(calibration_model.coef_).reshape(-1)[0])
+    return slope, intercept
+
+
 class CalibratedPredictor(BaseEstimator, ClassifierMixin):
     """Wrap a fitted predictor and calibrate its binary scores with Platt scaling."""
 
@@ -97,30 +122,71 @@ class CalibratedPredictor(BaseEstimator, ClassifierMixin):
 
         brier_base = brier_score_loss(y_array, base_proba)
         brier_cal = brier_score_loss(y_array, calibrated_proba)
+        base_slope, base_intercept = _compute_calibration_slope_intercept(
+            y_array,
+            base_proba,
+            self.eps,
+        )
+        calibrated_slope, calibrated_intercept = _compute_calibration_slope_intercept(
+            y_array,
+            calibrated_proba,
+            self.eps,
+        )
 
-        plt.figure(figsize=(6, 6))
-        plt.plot([0, 1], [0, 1], linestyle="--", color="gray", linewidth=1, label="Calibration parfaite")
-        plt.plot(
+        fig, ax = plt.subplots(figsize=(6, 6))
+        ax.plot(
+            [0, 1],
+            [0, 1],
+            linestyle="--",
+            color="gray",
+            linewidth=1,
+            label="Perfect calibration",
+        )
+        ax.plot(
             mean_pred_base,
             frac_pos_base,
             marker="o",
             linewidth=2,
-            label=f"Avant calibration (Brier={brier_base:.3f})",
+            label=f"Before calibration (Brier={brier_base:.3f})",
         )
-        plt.plot(
+        ax.plot(
             mean_pred_cal,
             frac_pos_cal,
             marker="o",
             linewidth=2,
-            label=f"Apres calibration {self.calibration_method_} (Brier={brier_cal:.3f})",
+            label=f"After calibration (Brier={brier_cal:.3f})",
         )
-        plt.xlabel("Probabilite predite moyenne")
-        plt.ylabel("Frequence observee")
-        plt.title("Courbe de calibration")
-        plt.legend(loc="best")
-        plt.grid(False)
-        plt.tight_layout()
+        ax.set_xlabel("Mean predicted probability")
+        ax.set_ylabel("Observed frequency")
+        ax.set_title("Calibration curve")
+        ax.legend(loc="lower right")
+        ax.grid(False)
+
+        annotation_text = (
+            f"Before: slope={base_slope:.3f}, intercept={base_intercept:.3f}\n"
+            f"After: slope={calibrated_slope:.3f}, intercept={calibrated_intercept:.3f}"
+        )
+        ax.text(
+            0.03,
+            0.97,
+            annotation_text,
+            transform=ax.transAxes,
+            va="top",
+            ha="left",
+            bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.9, "edgecolor": "lightgray"},
+        )
+
+        fig.tight_layout()
         plt.show()
+
+        return {
+            "brier_before": brier_base,
+            "brier_after": brier_cal,
+            "slope_before": base_slope,
+            "intercept_before": base_intercept,
+            "slope_after": calibrated_slope,
+            "intercept_after": calibrated_intercept,
+        }
 
     def fit(self, X: Any, y: Any):
         calibration_method = self._normalized_method()

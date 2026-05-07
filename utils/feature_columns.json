@@ -86,11 +86,14 @@
   ],
   "oxygene" : 
   [
-    "",
-    "",
-    "",
+    "CPAP",
+    "RRT",
+    "oxygen_strategy_NIV helmet_initiation date",
+    "J IOT.1",
+    "oxygen_strategy_NIV_initiation date",
+    "HFNO",
     "Vasopressors",
-    ""
+    "HELMET"
 
   ],
   "diagnostic_feature_sets": {
