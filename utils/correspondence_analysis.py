@@ -138,6 +138,28 @@ def _pad_coordinates(
     return pd.DataFrame(padded, columns=[f"{prefix}1", f"{prefix}2"])
 
 
+def _scale_marker_sizes(
+    prevalence: pd.Series,
+    min_size: float,
+    max_size: float,
+) -> pd.Series:
+    prevalence = prevalence.astype(float)
+    if prevalence.empty:
+        return prevalence
+
+    min_prevalence = float(prevalence.min())
+    max_prevalence = float(prevalence.max())
+
+    if np.isclose(min_prevalence, max_prevalence):
+        midpoint = (min_size + max_size) / 2.0
+        return pd.Series(midpoint, index=prevalence.index, dtype=float)
+
+    scaled = min_size + (
+        (prevalence - min_prevalence) / (max_prevalence - min_prevalence)
+    ) * (max_size - min_size)
+    return scaled.astype(float)
+
+
 def correspondence_analysis(
     diagnoses: pd.DataFrame,
     underlying_conditions: pd.DataFrame,
@@ -147,6 +169,8 @@ def correspondence_analysis(
     diagnosis_color: str = "#E41A1C",
     underlying_condition_color: str = "#377EB8",
     figsize: tuple[float, float] = (10, 8),
+    diagnosis_marker_size_range: tuple[float, float] = (80.0, 320.0),
+    underlying_condition_marker_size_range: tuple[float, float] = (80.0, 320.0),
 ) -> dict[str, Any]:
     """
     Build and plot a 2D correspondence analysis from two aligned binary tables.
@@ -159,6 +183,8 @@ def correspondence_analysis(
         diagnosis_color: Couleur des points de diagnostic.
         underlying_condition_color: Couleur des points de terrain.
         figsize: Taille de la figure matplotlib.
+        diagnosis_marker_size_range: Taille min/max des ronds selon prevalence.
+        underlying_condition_marker_size_range: Taille min/max des carres selon prevalence.
 
     Returns:
         dict contenant la figure, les coordonnees, la table de contingence
@@ -171,6 +197,8 @@ def correspondence_analysis(
     )
 
     contingency_table = _build_contingency_table(diagnoses_df, conditions_df)
+    diagnosis_prevalence = diagnoses_df.mean(axis=0).astype(float)
+    underlying_condition_prevalence = conditions_df.mean(axis=0).astype(float)
     active_rows = contingency_table.sum(axis=1) > 0
     active_columns = contingency_table.sum(axis=0) > 0
 
@@ -183,6 +211,8 @@ def correspondence_analysis(
         )
 
     contingency_table = contingency_table.loc[active_rows, active_columns]
+    diagnosis_prevalence = diagnosis_prevalence.loc[contingency_table.index]
+    underlying_condition_prevalence = underlying_condition_prevalence.loc[contingency_table.columns]
     max_rank = min(contingency_table.shape[0] - 1, contingency_table.shape[1] - 1)
     if max_rank < 1:
         raise ValueError(
@@ -221,6 +251,16 @@ def correspondence_analysis(
     row_coordinates.index = contingency_table.index
     column_coordinates = _pad_coordinates(column_coordinates_raw, "CA")
     column_coordinates.index = contingency_table.columns
+    diagnosis_marker_sizes = _scale_marker_sizes(
+        diagnosis_prevalence,
+        min_size=diagnosis_marker_size_range[0],
+        max_size=diagnosis_marker_size_range[1],
+    )
+    underlying_condition_marker_sizes = _scale_marker_sizes(
+        underlying_condition_prevalence,
+        min_size=underlying_condition_marker_size_range[0],
+        max_size=underlying_condition_marker_size_range[1],
+    )
 
     fig, ax = plt.subplots(figsize=figsize)
     ax.axhline(0, color="lightgray", linewidth=1.0, zorder=1)
@@ -230,7 +270,7 @@ def correspondence_analysis(
         row_coordinates["CA1"],
         row_coordinates["CA2"],
         color=diagnosis_color,
-        s=80,
+        s=diagnosis_marker_sizes.to_numpy(),
         alpha=0.9,
         label="Diagnosis",
         zorder=3,
@@ -239,7 +279,7 @@ def correspondence_analysis(
         column_coordinates["CA1"],
         column_coordinates["CA2"],
         color=underlying_condition_color,
-        s=80,
+        s=underlying_condition_marker_sizes.to_numpy(),
         alpha=0.9,
         marker="s",
         label="Underlying conditions",
@@ -286,6 +326,10 @@ def correspondence_analysis(
         "contingency_table": contingency_table,
         "row_coordinates": row_coordinates,
         "column_coordinates": column_coordinates,
+        "diagnosis_prevalence": diagnosis_prevalence,
+        "underlying_condition_prevalence": underlying_condition_prevalence,
+        "diagnosis_marker_sizes": diagnosis_marker_sizes,
+        "underlying_condition_marker_sizes": underlying_condition_marker_sizes,
         "singular_values": singular_values,
         "explained_variance": explained_variance,
         "explained_variance_ratio": explained_variance_ratio,
@@ -307,6 +351,8 @@ def correspondence_analysis_from_dataframe(
     diagnosis_color: str = "#E41A1C",
     underlying_condition_color: str = "#377EB8",
     figsize: tuple[float, float] = (10, 8),
+    diagnosis_marker_size_range: tuple[float, float] = (80.0, 320.0),
+    underlying_condition_marker_size_range: tuple[float, float] = (80.0, 320.0),
 ) -> dict[str, Any]:
     """
     Wrapper that builds a correspondence analysis from a single dataframe.
@@ -352,4 +398,6 @@ def correspondence_analysis_from_dataframe(
         diagnosis_color=diagnosis_color,
         underlying_condition_color=underlying_condition_color,
         figsize=figsize,
+        diagnosis_marker_size_range=diagnosis_marker_size_range,
+        underlying_condition_marker_size_range=underlying_condition_marker_size_range,
     )

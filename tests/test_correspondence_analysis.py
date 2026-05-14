@@ -91,6 +91,30 @@ class TestCorrespondenceAnalysisFromDataFrame(unittest.TestCase):
                 ["diag_b", "cond_x"],
             )
 
+    def test_marker_sizes_follow_prevalence(self) -> None:
+        result = correspondence_analysis_from_dataframe(
+            self.df,
+            ["diag_a", "diag_b"],
+            ["cond_x", "cond_y", "cond_z"],
+        )
+
+        self.assertGreater(
+            result["diagnosis_prevalence"]["diag_a"],
+            result["diagnosis_prevalence"]["diag_b"],
+        )
+        self.assertGreater(
+            result["diagnosis_marker_sizes"]["diag_a"],
+            result["diagnosis_marker_sizes"]["diag_b"],
+        )
+        self.assertGreater(
+            result["underlying_condition_prevalence"]["cond_y"],
+            result["underlying_condition_prevalence"]["cond_x"],
+        )
+        self.assertGreater(
+            result["underlying_condition_marker_sizes"]["cond_y"],
+            result["underlying_condition_marker_sizes"]["cond_x"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
