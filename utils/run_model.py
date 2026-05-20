@@ -444,7 +444,7 @@ def load_config_for_target(target_col, config_dir=None):
 def run_config_for_target(target_col, df_features_clean, df_labels_fusion, sensibilite=False, show_importance=False,
                           show_roc=False, show_shap=False, features_sensibilite=None, type_sensi='all',
                           method_importance='native_importance', config_dir=os.getcwd() + '\\configs\\',
-                          condition_test=None, text_save=None, to_save=False, save_dir=None,calibration_method = "isotonic"):
+                          condition_test=None, text_save=None, to_save=False, save_dir=None,calibration = False,calibration_method = "isotonic"):
     config, config_path = load_config_for_target(target_col, config_dir=config_dir)
     model_name = config.get("model")
     augmentation_name = config.get("augmentation", "No Augmentation")
@@ -478,7 +478,7 @@ def run_config_for_target(target_col, df_features_clean, df_labels_fusion, sensi
                                metric_entry["needs_proba"], THRESHOLD, target_col, X_train.columns, show_roc,
                                show_importance, show_shap, method_importance, sensibilite, features_sensibilite,
                                type_sensi, True, text_save, to_save, save_dir,
-                               calibration=True,
+                               calibration=calibration,
                                calibration_method = calibration_method,
                                show_calibration_fitness= True,
                                )

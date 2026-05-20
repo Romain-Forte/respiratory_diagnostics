@@ -4,6 +4,8 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from sklearn.experimental import enable_iterative_imputer  # noqa: F401
+from sklearn.impute import IterativeImputer
 
 TRUE_LIKE = {"1", "true", "vrai", "yes", "oui", "y", "t"}
 FALSE_LIKE = {"0", "false", "faux", "no", "non", "n", "f"}
@@ -187,7 +189,94 @@ def nettoyer_colonnes(df):
     df = df.rename(columns=rename_map)
     return df
 
-def nettoyer_nan_par_colonne(df, strategies):
+
+def _imputer_nan_par_mice(
+    df: pd.DataFrame,
+    target_columns=None,
+    predictor_columns=None,
+    random_state: int = 0,
+    max_iter: int = 10,
+) -> pd.DataFrame:
+    """
+    Impute les NaN de colonnes numeriques avec IterativeImputer (MICE).
+
+    `target_columns` definit les colonnes a mettre a jour apres imputation.
+    `predictor_columns` definit les colonnes utilisees comme predicteurs.
+    Les colonnes non numeriques ou entierement vides sont ignorees.
+    """
+
+    df = df.copy()
+    target_columns = list(target_columns) if target_columns is not None else list(df.columns)
+    predictor_columns = (
+        list(predictor_columns) if predictor_columns is not None else list(df.columns)
+    )
+
+    missing_targets = [col for col in target_columns if col not in df.columns]
+    for col in missing_targets:
+        print(f"Colonne '{col}' absente du DataFrame pour MICE, ignoree.")
+    target_columns = [col for col in target_columns if col in df.columns]
+
+    missing_predictors = [col for col in predictor_columns if col not in df.columns]
+    if missing_predictors:
+        raise ValueError(
+            f"Colonnes predictrices absentes pour MICE: {missing_predictors}"
+        )
+
+    numeric_predictors = {}
+    ignored_predictors = []
+    for col in predictor_columns:
+        numeric_series = pd.to_numeric(df[col], errors="coerce")
+        if numeric_series.notna().sum() == 0:
+            ignored_predictors.append(col)
+            continue
+        numeric_predictors[col] = numeric_series
+
+    if not numeric_predictors:
+        print("Aucune colonne numerique exploitable pour l'imputation MICE.")
+        return df
+
+    df_numeric = pd.DataFrame(numeric_predictors, index=df.index)
+    eligible_targets = [col for col in target_columns if col in df_numeric.columns]
+
+    if not eligible_targets:
+        print("Aucune colonne cible exploitable pour l'imputation MICE.")
+        return df
+
+    if ignored_predictors:
+        print(
+            "Colonnes ignorees pour MICE (non numeriques ou entierement vides): "
+            + ", ".join(map(str, ignored_predictors))
+        )
+
+    nb_nan_avant = int(df_numeric[eligible_targets].isna().sum().sum())
+    if nb_nan_avant == 0:
+        print("Aucun NaN a imputer sur les colonnes cible MICE.")
+        return df
+
+    imputer = IterativeImputer(
+        random_state=random_state,
+        max_iter=max_iter,
+        sample_posterior=False,
+    )
+    imputed_array = imputer.fit_transform(df_numeric)
+    df_imputed = pd.DataFrame(imputed_array, columns=df_numeric.columns, index=df.index)
+    df.loc[:, eligible_targets] = df_imputed[eligible_targets]
+
+    print(
+        f"MICE applique sur {len(eligible_targets)} colonne(s), "
+        f"{nb_nan_avant} NaN imputes."
+    )
+    return df
+
+
+def nettoyer_nan_par_colonne(
+    df,
+    strategies=None,
+    use_mice: bool = False,
+    mice_columns=None,
+    mice_random_state: int = 42,
+    mice_max_iter: int = 10,
+):
     """
     Remplace les NaN colonne par colonne selon la stratégie choisie.
 
@@ -195,11 +284,22 @@ def nettoyer_nan_par_colonne(df, strategies):
     ----------
     df : pd.DataFrame
         Le DataFrame à nettoyer.
-    strategies : dict
+    strategies : dict, optional
         Dictionnaire {colonne: méthode} où la méthode peut être :
           - "median" : remplace par la médiane de la colonne
           - "zero"   : remplace par 0
+          - "mice"   : impute la colonne avec MICE en s'appuyant sur les
+            autres colonnes numériques du DataFrame
           - une valeur numérique ou textuelle spécifique (ex: "inconnu", 99, etc.)
+    use_mice : bool, optional
+        Si True, applique MICE sur tout le DataFrame numérique, ou sur
+        `mice_columns` si fourni, avant les stratégies colonne par colonne.
+    mice_columns : list, optional
+        Sous-ensemble de colonnes à mettre à jour par MICE.
+    mice_random_state : int, optional
+        Graine passée à IterativeImputer.
+    mice_max_iter : int, optional
+        Nombre maximal d'itérations pour MICE.
 
     Retour
     ------
@@ -208,12 +308,39 @@ def nettoyer_nan_par_colonne(df, strategies):
     """
 
     df = df.copy()
+    strategies = dict(strategies or {})
+
+    mice_strategy_columns = [
+        col for col, methode in strategies.items() if methode == "mice"
+    ]
+    if use_mice or mice_columns is not None or mice_strategy_columns:
+        mice_target_columns = []
+        if use_mice and mice_columns is None:
+            mice_target_columns.extend(df.columns.tolist())
+        if mice_columns is not None:
+            mice_target_columns.extend(list(mice_columns))
+        mice_target_columns.extend(mice_strategy_columns)
+
+        seen = set()
+        mice_target_columns = [
+            col for col in mice_target_columns if not (col in seen or seen.add(col))
+        ]
+
+        df = _imputer_nan_par_mice(
+            df,
+            target_columns=mice_target_columns,
+            predictor_columns=df.columns.tolist(),
+            random_state=mice_random_state,
+            max_iter=mice_max_iter,
+        )
 
     for col, methode in strategies.items():
         if col not in df.columns:
-            print(f"⚠️ Colonne '{col}' absente du DataFrame, ignorée.")
+            print(f"[WARN] Colonne '{col}' absente du DataFrame, ignoree.")
             continue
         # 🔹 Tenter conversion numérique si c’est une stratégie numérique
+        if methode == "mice":
+            continue
         if methode in ["median", "zero"] or isinstance(methode, (int, float)):
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
@@ -221,22 +348,22 @@ def nettoyer_nan_par_colonne(df, strategies):
             if pd.api.types.is_numeric_dtype(df[col]):
                 mediane = df[col].median()
                 df[col] = df[col].fillna(mediane)
-                print(f"🔹 {col} → NaN remplacés par la médiane ({mediane})")
+                print(f"[INFO] {col} -> NaN remplaces par la mediane ({mediane})")
             else:
-                print(f"⚠️ {col} n’est pas numérique → médiane impossible, non modifiée.")
+                print(f"[WARN] {col} n'est pas numerique -> mediane impossible, non modifiee.")
 
         elif methode == "zero":
             df[col] = df[col].fillna(0)
-            # print(f"🔹 {col} → NaN remplacés par 0")
+            # print(f"[INFO] {col} -> NaN remplaces par 0")
         
         elif methode == "str":
             df[col] = df[col].fillna("").astype(str)
         else:
             df[col] = df[col].fillna(methode)
-            print(f"🔹 {col} → NaN remplacés par '{methode}'")
+            print(f"[INFO] {col} -> NaN remplaces par '{methode}'")
 
     nb_nan_restants = df.isna().sum().sum()
-    print(f"\n✅ Nettoyage terminé. NaN restants : {nb_nan_restants}")
+    print(f"\n[OK] Nettoyage termine. NaN restants : {nb_nan_restants}")
     return df
 
 def fusionner_labels(df: pd.DataFrame, mapping: dict, mode: str = "max") -> pd.DataFrame:

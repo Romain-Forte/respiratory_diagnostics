@@ -6,11 +6,32 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.lines import Line2D
 
 __all__ = [
     "correspondence_analysis",
     "correspondence_analysis_from_dataframe",
 ]
+
+DEFAULT_UNDERLYING_CONDITION_LEGEND = (
+    "Cause of immunosuppression\n"
+    "Hematology: hematological malignancy (including allogeneic stem cell transplantation)\n"
+    "IS treatment: immunosuppressive treatment\n"
+    "Solid tumor: oncology\n"
+    "Transplantation: graft / transplantation"
+)
+
+DEFAULT_DIAGNOSIS_LEGEND = (
+    "Etiology of acute respiratory failure\n"
+    "Disease: disease-related infiltrates\n"
+    "Toxicity: drug toxicity\n"
+    "Bacterial: bacterial infection\n"
+    "Viral: viral infection\n"
+    "CPE: cardiogenic pulmonary oedema\n"
+    "Fungal: all fungus\n"
+    "IPA: invasive pulmonary aspergillosis\n"
+    "PJP: Pneumocystis jirovecii infection"
+)
 
 
 def _validate_dataframe(name: str, value: Any) -> pd.DataFrame:
@@ -160,10 +181,82 @@ def _scale_marker_sizes(
     return scaled.astype(float)
 
 
+def _resolve_label(mapping_label: dict[str, str] | None, raw_label: str) -> str:
+    if mapping_label is None:
+        return raw_label
+    return str(mapping_label.get(raw_label, raw_label))
+
+
+def _annotate_points_below(
+    ax: plt.Axes,
+    coordinates: pd.DataFrame,
+    *,
+    mapping_label: dict[str, str] | None,
+    color: str,
+) -> None:
+    for raw_label, point in coordinates.iterrows():
+        ax.annotate(
+            _resolve_label(mapping_label, str(raw_label)),
+            (point["CA1"], point["CA2"]),
+            xytext=(0, 20),
+            textcoords="offset points",
+            ha="center",
+            va="top",
+            color=color,
+            clip_on=False,
+            zorder=4,
+        )
+
+
+def _build_explanatory_legend(
+    ax: plt.Axes,
+    *,
+    diagnosis_color: str,
+    underlying_condition_color: str,
+    diagnosis_legend_text: str,
+    underlying_condition_legend_text: str,
+) -> None:
+    handles = [
+        Line2D(
+            [0],
+            [0],
+            marker="s",
+            linestyle="None",
+            markerfacecolor=underlying_condition_color,
+            markeredgecolor=underlying_condition_color,
+            markersize=10,
+            label=underlying_condition_legend_text,
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            linestyle="None",
+            markerfacecolor=diagnosis_color,
+            markeredgecolor=diagnosis_color,
+            markersize=10,
+            label=diagnosis_legend_text,
+        ),
+    ]
+    legend = ax.legend(
+        handles=handles,
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1.0),
+        borderaxespad=0.0,
+        frameon=True,
+        alignment="left",
+        handletextpad=0.8,
+        labelspacing=1.2,
+    )
+    for text in legend.get_texts():
+        text.set_multialignment("left")
+
+
 def correspondence_analysis(
     diagnoses: pd.DataFrame,
     underlying_conditions: pd.DataFrame,
     *,
+    mapping_label: dict[str, str] | None = None,
     to_save: bool = False,
     save_dir: str | Path | None = None,
     diagnosis_color: str = "#E41A1C",
@@ -171,6 +264,8 @@ def correspondence_analysis(
     figsize: tuple[float, float] = (10, 8),
     diagnosis_marker_size_range: tuple[float, float] = (80.0, 320.0),
     underlying_condition_marker_size_range: tuple[float, float] = (80.0, 320.0),
+    diagnosis_legend_text: str = DEFAULT_DIAGNOSIS_LEGEND,
+    underlying_condition_legend_text: str = DEFAULT_UNDERLYING_CONDITION_LEGEND,
 ) -> dict[str, Any]:
     """
     Build and plot a 2D correspondence analysis from two aligned binary tables.
@@ -178,6 +273,7 @@ def correspondence_analysis(
     Args:
         diagnoses: DataFrame binaire des diagnostics.
         underlying_conditions: DataFrame binaire des terrains/sous-jacents.
+        mapping_label: Mapping optionnel pour renommer les labels affiches.
         to_save: Si True, sauvegarde la figure.
         save_dir: Repertoire de sauvegarde.
         diagnosis_color: Couleur des points de diagnostic.
@@ -185,6 +281,8 @@ def correspondence_analysis(
         figsize: Taille de la figure matplotlib.
         diagnosis_marker_size_range: Taille min/max des ronds selon prevalence.
         underlying_condition_marker_size_range: Taille min/max des carres selon prevalence.
+        diagnosis_legend_text: Texte descriptif de la legende rouge.
+        underlying_condition_legend_text: Texte descriptif de la legende bleue.
 
     Returns:
         dict contenant la figure, les coordonnees, la table de contingence
@@ -272,7 +370,6 @@ def correspondence_analysis(
         color=diagnosis_color,
         s=diagnosis_marker_sizes.to_numpy(),
         alpha=0.9,
-        label="Diagnosis",
         zorder=3,
     )
     ax.scatter(
@@ -282,20 +379,21 @@ def correspondence_analysis(
         s=underlying_condition_marker_sizes.to_numpy(),
         alpha=0.9,
         marker="s",
-        label="Underlying conditions",
         zorder=3,
     )
 
-    for label, point in row_coordinates.iterrows():
-        ax.text(point["CA1"], point["CA2"], f" {label}", color=diagnosis_color, va="center")
-    for label, point in column_coordinates.iterrows():
-        ax.text(
-            point["CA1"],
-            point["CA2"],
-            f" {label}",
-            color=underlying_condition_color,
-            va="center",
-        )
+    _annotate_points_below(
+        ax,
+        row_coordinates,
+        mapping_label=mapping_label,
+        color=diagnosis_color,
+    )
+    _annotate_points_below(
+        ax,
+        column_coordinates,
+        mapping_label=mapping_label,
+        color=underlying_condition_color,
+    )
 
     explained_variance_ca1 = (
         explained_variance_ratio[0] * 100 if len(explained_variance_ratio) >= 1 else 0.0
@@ -305,10 +403,17 @@ def correspondence_analysis(
     )
     ax.set_xlabel(f"CA1 ({explained_variance_ca1:.1f}% explained variance)")
     ax.set_ylabel(f"CA2 ({explained_variance_ca2:.1f}% explained variance)")
-    ax.set_title("Correspondence analysis: diagnosis vs underlying conditions")
-    ax.legend(loc="best", frameon=True)
+    ax.set_title("Correspondence analysis: etiology vs cause of immunosuppression")
+    ax.margins(x=0.2, y=0.2)
+    _build_explanatory_legend(
+        ax,
+        diagnosis_color=diagnosis_color,
+        underlying_condition_color=underlying_condition_color,
+        diagnosis_legend_text=diagnosis_legend_text,
+        underlying_condition_legend_text=underlying_condition_legend_text,
+    )
     ax.grid(alpha=0.2)
-    fig.tight_layout()
+    fig.subplots_adjust(right=0.68)
 
     save_path: Path | None = None
     if to_save:
@@ -345,6 +450,7 @@ def correspondence_analysis_from_dataframe(
     df: pd.DataFrame,
     diagnosis_columns: list[str] | tuple[str, ...] | pd.Index,
     underlying_condition_columns: list[str] | tuple[str, ...] | pd.Index,
+    mapping_label: dict[str, str] | None = None,
     *,
     to_save: bool = False,
     save_dir: str | Path | None = None,
@@ -353,6 +459,8 @@ def correspondence_analysis_from_dataframe(
     figsize: tuple[float, float] = (10, 8),
     diagnosis_marker_size_range: tuple[float, float] = (80.0, 320.0),
     underlying_condition_marker_size_range: tuple[float, float] = (80.0, 320.0),
+    diagnosis_legend_text: str = DEFAULT_DIAGNOSIS_LEGEND,
+    underlying_condition_legend_text: str = DEFAULT_UNDERLYING_CONDITION_LEGEND,
 ) -> dict[str, Any]:
     """
     Wrapper that builds a correspondence analysis from a single dataframe.
@@ -393,6 +501,7 @@ def correspondence_analysis_from_dataframe(
     return correspondence_analysis(
         diagnoses=diagnoses_df,
         underlying_conditions=conditions_df,
+        mapping_label=mapping_label,
         to_save=to_save,
         save_dir=save_dir,
         diagnosis_color=diagnosis_color,
@@ -400,4 +509,6 @@ def correspondence_analysis_from_dataframe(
         figsize=figsize,
         diagnosis_marker_size_range=diagnosis_marker_size_range,
         underlying_condition_marker_size_range=underlying_condition_marker_size_range,
+        diagnosis_legend_text=diagnosis_legend_text,
+        underlying_condition_legend_text=underlying_condition_legend_text,
     )

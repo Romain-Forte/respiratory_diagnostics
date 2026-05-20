@@ -98,19 +98,19 @@ class TestCorrespondenceAnalysisFromDataFrame(unittest.TestCase):
             ["cond_x", "cond_y", "cond_z"],
         )
 
-        self.assertGreater(
+        self.assertEqual(
             result["diagnosis_prevalence"]["diag_a"],
             result["diagnosis_prevalence"]["diag_b"],
         )
-        self.assertGreater(
+        self.assertEqual(
             result["diagnosis_marker_sizes"]["diag_a"],
             result["diagnosis_marker_sizes"]["diag_b"],
         )
-        self.assertGreater(
+        self.assertEqual(
             result["underlying_condition_prevalence"]["cond_y"],
             result["underlying_condition_prevalence"]["cond_x"],
         )
-        self.assertGreater(
+        self.assertEqual(
             result["underlying_condition_marker_sizes"]["cond_y"],
             result["underlying_condition_marker_sizes"]["cond_x"],
         )
