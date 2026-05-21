@@ -266,6 +266,7 @@ def correspondence_analysis(
     underlying_condition_marker_size_range: tuple[float, float] = (80.0, 320.0),
     diagnosis_legend_text: str = DEFAULT_DIAGNOSIS_LEGEND,
     underlying_condition_legend_text: str = DEFAULT_UNDERLYING_CONDITION_LEGEND,
+    show_grid: bool = True,
 ) -> dict[str, Any]:
     """
     Build and plot a 2D correspondence analysis from two aligned binary tables.
@@ -283,6 +284,7 @@ def correspondence_analysis(
         underlying_condition_marker_size_range: Taille min/max des carres selon prevalence.
         diagnosis_legend_text: Texte descriptif de la legende rouge.
         underlying_condition_legend_text: Texte descriptif de la legende bleue.
+        show_grid: Si True, affiche le quadrillage matplotlib.
 
     Returns:
         dict contenant la figure, les coordonnees, la table de contingence
@@ -412,7 +414,8 @@ def correspondence_analysis(
         diagnosis_legend_text=diagnosis_legend_text,
         underlying_condition_legend_text=underlying_condition_legend_text,
     )
-    ax.grid(alpha=0.2)
+    if show_grid:
+        ax.grid(alpha=0.2)
     fig.subplots_adjust(right=0.68)
 
     save_path: Path | None = None
@@ -461,6 +464,7 @@ def correspondence_analysis_from_dataframe(
     underlying_condition_marker_size_range: tuple[float, float] = (80.0, 320.0),
     diagnosis_legend_text: str = DEFAULT_DIAGNOSIS_LEGEND,
     underlying_condition_legend_text: str = DEFAULT_UNDERLYING_CONDITION_LEGEND,
+    show_grid: bool = False,
 ) -> dict[str, Any]:
     """
     Wrapper that builds a correspondence analysis from a single dataframe.
@@ -511,4 +515,5 @@ def correspondence_analysis_from_dataframe(
         underlying_condition_marker_size_range=underlying_condition_marker_size_range,
         diagnosis_legend_text=diagnosis_legend_text,
         underlying_condition_legend_text=underlying_condition_legend_text,
+        show_grid=show_grid,
     )

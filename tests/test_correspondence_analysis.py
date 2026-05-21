@@ -115,6 +115,17 @@ class TestCorrespondenceAnalysisFromDataFrame(unittest.TestCase):
             result["underlying_condition_marker_sizes"]["cond_x"],
         )
 
+    def test_wrapper_hides_grid_by_default(self) -> None:
+        result = correspondence_analysis_from_dataframe(
+            self.df,
+            ["diag_a", "diag_b"],
+            ["cond_x", "cond_y", "cond_z"],
+        )
+
+        ax = result["ax"]
+        self.assertTrue(all(not line.get_visible() for line in ax.get_xgridlines()))
+        self.assertTrue(all(not line.get_visible() for line in ax.get_ygridlines()))
+
 
 if __name__ == "__main__":
     unittest.main()
